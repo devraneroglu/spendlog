@@ -1,0 +1,119 @@
+version: '3.8'
+
+# ====================================================================
+# SpendLog V2 — Çoklu Konteyner Mimari Orkestrasyonu (Full-Stack Docker)
+# ====================================================================
+
+services:
+  # ------------------------------------------------------------------
+  # 1. VERİTABANI: Microsoft SQL Server 2022
+  # ------------------------------------------------------------------
+  spendlog-db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: spendlog-db
+    restart: unless-stopped
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:-SpendLog2026!StrongPass}
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - spendlog_mssql_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${MSSQL_SA_PASSWORD:-SpendLog2026!StrongPass}\" -C -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ------------------------------------------------------------------
+  # 2. DAĞITIK ÖNBELLEK: Redis 7
+  # ------------------------------------------------------------------
+  spendlog-redis:
+    image: redis:7-alpine
+    container_name: spendlog-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - spendlog_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ------------------------------------------------------------------
+  # 3. MİKROSERVİS: Python 3.13 FastAPI & MarkItDown PDF Engine
+  # ------------------------------------------------------------------
+  spendlog-scraper:
+    build:
+      context: ./scraper-service
+      dockerfile: Dockerfile
+    container_name: spendlog-scraper
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=spendlog-redis
+      - REDIS_PORT=6379
+    depends_on:
+      spendlog-redis:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------
+  # 4. BACKEND: .NET 10 Web API (Clean Architecture & CQRS)
+  # ------------------------------------------------------------------
+  spendlog-api:
+    build:
+      context: .
+      dockerfile: backend/SpendLogV2.API/Dockerfile
+    container_name: spendlog-api
+    restart: unless-stopped
+    ports:
+      - "5007:5007"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Server=spendlog-db,1433;Database=SpendLogV2Db;User Id=sa;Password=${MSSQL_SA_PASSWORD:-SpendLog2026!StrongPass};TrustServerCertificate=True;
+      - Redis__ConnectionString=spendlog-redis:6379,abortConnect=false,connectTimeout=2000
+      - PythonService__BaseUrl=http://spendlog-scraper:8000
+      - Telegram__BotToken=${TELEGRAM_BOT_TOKEN:-YOUR_TELEGRAM_BOT_TOKEN_HERE}
+      - Jwt__SecretKey=${JWT_SECRET_KEY:-SpendLog_Default_Development_Secret_Key_Minimum_32_Chars!}
+      - Jwt__Issuer=SpendLogV2API
+      - Jwt__Audience=SpendLogV2Client
+      - Jwt__ExpiryMinutes=15
+    depends_on:
+      spendlog-db:
+        condition: service_healthy
+      spendlog-redis:
+        condition: service_healthy
+      spendlog-scraper:
+        condition: service_started
+
+  # ------------------------------------------------------------------
+  # 5. FRONTEND: Next.js 16 (React 19 & Tailwind CSS)
+  # ------------------------------------------------------------------
+  spendlog-web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: spendlog-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5007
+      - NEXT_PUBLIC_SCRAPER_URL=http://localhost:8000
+    depends_on:
+      - spendlog-api
+
+# --------------------------------------------------------------------
+# Kalıcı Hacimler (Persistent Volumes)
+# --------------------------------------------------------------------
+volumes:
+  spendlog_mssql_data:
+    driver: local
+  spendlog_redis_data:
+    driver: local

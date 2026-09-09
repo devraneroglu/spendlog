@@ -1,0 +1,18 @@
+[Unit]
+Description=SpendLog V2 Web API & Telegram Daemon Service
+After=network.target mssql-server.service
+
+[Service]
+WorkingDirectory=/var/www/spendlog/backend
+ExecStart=/usr/bin/dotnet /var/www/spendlog/backend/SpendLogV2.API.dll --urls "http://0.0.0.0:5007"
+Restart=always
+# Çökme durumunda 3 saniye sonra otomatik yeniden başlat (Self-Healing)
+RestartSec=3
+KillSignal=SIGINT
+SyslogIdentifier=spendlog-api
+User=www-data
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+[Install]
+WantedBy=multi-user.target

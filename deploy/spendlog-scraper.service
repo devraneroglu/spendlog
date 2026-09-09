@@ -1,0 +1,16 @@
+[Unit]
+Description=SpendLog V2 Python OCR & Scraping Microservice
+After=network.target
+
+[Service]
+WorkingDirectory=/var/www/spendlog/scraper-service
+ExecStart=/var/www/spendlog/scraper-service/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+SyslogIdentifier=spendlog-scraper
+User=www-data
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

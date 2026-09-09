@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="SpendLogV2.API/SpendLogV2.API.csproj" />
+  <Project Path="SpendLogV2.Application/SpendLogV2.Application.csproj" />
+  <Project Path="SpendLogV2.Domain/SpendLogV2.Domain.csproj" />
+  <Project Path="SpendLogV2.Infrastructure/SpendLogV2.Infrastructure.csproj" />
+</Solution>

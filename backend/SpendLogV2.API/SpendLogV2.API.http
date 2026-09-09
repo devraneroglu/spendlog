@@ -1,0 +1,6 @@
+@SpendLogV2.API_HostAddress = http://localhost:5007
+
+GET {{SpendLogV2.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
