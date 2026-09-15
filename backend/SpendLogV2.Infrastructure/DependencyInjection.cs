@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<ITelegramNotificationService, TelegramNotificationService>();
         services.AddSingleton<ITelegramAlertService, TelegramAlertService>();
         services.AddScoped<ITelegramMessageProcessor, TelegramMessageProcessor>();
+        services.AddHttpClient();
 
         // Redis Dağıtık Önbellek (L2 Cache - Safe Fallback ile)
         var redisConnStr = configuration["Redis:ConnectionString"]

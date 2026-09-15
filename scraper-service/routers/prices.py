@@ -241,12 +241,13 @@ async def lookup_portfolio_prices(payload: PortfolioLookupRequest):
         else:
             missing_symbols.append(sym)
 
-    # Önbellekte henüz bulunmayan özel hisse/kripto varsa resilient scraper ile çek
+    # Önbellekte henüz bulunmayan özel hisse/kripto varsa resilient scraper ile çek (Maks 2.5 sn sınır)
     if missing_symbols:
-        async def fetch_missing(s: str):
+        async def _fetch_single(s: str):
+            clean_s = s.strip()
             # 1. Kripto kontrolü
-            if any(k in s for k in ["BTC", "ETH", "SOL", "AVAX", "BNB", "XRP", "DOGE", "HYPE", "RAIL", "SYRUP"]) or "/" in s:
-                c_data = await scraper_service.get_crypto_data(s, "usd")
+            if any(k in clean_s for k in ["BTC", "ETH", "SOL", "AVAX", "BNB", "XRP", "DOGE", "HYPE", "RAIL", "SYRUP"]) or "/" in clean_s:
+                c_data = await scraper_service.get_crypto_data(clean_s, "usd")
                 if c_data and c_data.get("price") is not None:
                     res = {
                         "symbol": s,
@@ -258,7 +259,7 @@ async def lookup_portfolio_prices(payload: PortfolioLookupRequest):
                     return res
 
             # 2. Hisse kontrolü (BIST veya US)
-            s_data = await scraper_service.get_stock_data(s)
+            s_data = await scraper_service.get_stock_data(clean_s)
             if s_data and s_data.get("price") is not None:
                 res = {
                     "symbol": s,
@@ -270,7 +271,7 @@ async def lookup_portfolio_prices(payload: PortfolioLookupRequest):
                 return res
 
             # 3. Kripto son çare
-            c_data = await scraper_service.get_crypto_data(s, "usd")
+            c_data = await scraper_service.get_crypto_data(clean_s, "usd")
             if c_data and c_data.get("price") is not None:
                 res = {
                     "symbol": s,
@@ -282,6 +283,12 @@ async def lookup_portfolio_prices(payload: PortfolioLookupRequest):
                 return res
 
             return {"symbol": s, "price": None, "change": 0.0, "currency": "TRY"}
+
+        async def fetch_missing(s: str):
+            try:
+                return await asyncio.wait_for(_fetch_single(s), timeout=4.0)
+            except Exception:
+                return {"symbol": s, "price": None, "change": 0.0, "currency": "TRY"}
 
         missing_tasks = [fetch_missing(s) for s in missing_symbols]
         missing_res = await asyncio.gather(*missing_tasks, return_exceptions=True)

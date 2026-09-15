@@ -196,20 +196,24 @@ class HybridMarketCache:
 
         raw = symbol.upper().strip()
         clean = raw.replace("/USDT", "").replace("/USD", "").replace("/TRY", "").replace("USDT", "").replace("USD", "").replace("/TL", "").strip()
+        
+        # Türkçe karakter ve ayraç normalizasyonu (Örn: "GRAM ALTIN" -> "GRAMALTIN")
+        tr_map = str.maketrans("İıĞğÜüŞşÖöÇç", "IIGGUUSSÖÖCC")
+        norm = raw.translate(tr_map).replace(" ", "").replace("-", "").replace("_", "").replace(".", "").strip()
 
         # 0. Özel tekil önbellek kontrolü (önceki cache-miss aramaları)
-        cached_direct = self.get(f"asset:{raw}")
+        cached_direct = self.get(f"asset:{raw}") or self.get(f"asset:{clean}") or self.get(f"asset:{norm}")
         if cached_direct:
             return cached_direct
 
         # 1. Döviz Kurları
-        if raw in ["USD", "USDTRY", "USD/TRY", "DOLAR"]:
+        if raw in ["USD", "USDTRY", "USD/TRY", "DOLAR"] or norm in ["USD", "USDTRY", "DOLAR"]:
             curr = self.get("category:currency") or {}
             usd = curr.get("USD")
             rate = usd.get("rate", 34.50) if isinstance(usd, dict) else (usd or 34.50)
             chg = usd.get("change", 0.0) if isinstance(usd, dict) else 0.0
             return {"symbol": raw, "price": rate, "change": chg, "currency": "TRY"}
-        if raw in ["EUR", "EURTRY", "EUR/TRY", "EURO"]:
+        if raw in ["EUR", "EURTRY", "EUR/TRY", "EURO"] or norm in ["EUR", "EURTRY", "EURO"]:
             curr = self.get("category:currency") or {}
             eur = curr.get("EUR")
             rate = eur.get("rate", 37.25) if isinstance(eur, dict) else (eur or 37.25)
@@ -217,53 +221,67 @@ class HybridMarketCache:
             return {"symbol": raw, "price": rate, "change": chg, "currency": "TRY"}
 
         # 2. Altın & Kıymetli Madenler (BigPara & Emtia)
-        if raw in ["ALTIN", "GRAM", "GRAM-ALTIN", "GRAMALTIN", "GLD"]:
-            for g in (self.get("category:gold") or []):
-                if g.get("type") == "gram-altin":
-                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
-        elif "CEYREK" in raw:
-            for g in (self.get("category:gold") or []):
-                if g.get("type") == "ceyrek-altin":
-                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
-        elif "YARIM" in raw:
-            for g in (self.get("category:gold") or []):
-                if g.get("type") == "yarim-altin":
-                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
-        elif "TAM" in raw:
-            for g in (self.get("category:gold") or []):
-                if g.get("type") == "tam-altin":
-                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
-        elif "CUMHURIYET" in raw:
-            for g in (self.get("category:gold") or []):
-                if g.get("type") == "cumhuriyet-altini":
-                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
-        elif "BILEZIK" in raw:
-            for g in (self.get("category:gold") or []):
-                if g.get("type") == "22-ayar-bilezik":
-                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
-        elif "GUMUS" in raw:
-            for g in (self.get("category:gold") or []):
-                if g.get("type") == "gumus":
-                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
-        elif raw in ["ONS", "ONS-ALTIN", "XAU", "XAUUSD", "XAU/USD"]:
+        gold_list = self.get("category:gold") or []
+
+        # Ons Altın / Gümüş (USD bazlı)
+        if any(k in norm for k in ["ONSALTIN", "XAUUSD"]) or norm in ["ONS", "XAU"]:
             comm = self.get("category:commodities") or {}
             gold_ons = comm.get("gold")
             if isinstance(gold_ons, dict) and gold_ons.get("price"):
                 return {"symbol": raw, "price": gold_ons.get("price"), "change": gold_ons.get("change", 0.0), "currency": "USD"}
-            for g in (self.get("category:gold") or []):
+            for g in gold_list:
                 if g.get("type") == "ons-altin":
                     return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "USD"}
-        elif raw in ["XAG", "XAGUSD", "XAG/USD", "ONS-GUMUS"]:
+
+        elif any(k in norm for k in ["ONSGUMUS", "XAGUSD"]) or norm in ["XAG"]:
             comm = self.get("category:commodities") or {}
             silv_ons = comm.get("silver")
             if isinstance(silv_ons, dict) and silv_ons.get("price"):
                 return {"symbol": raw, "price": silv_ons.get("price"), "change": silv_ons.get("change", 0.0), "currency": "USD"}
+            for g in gold_list:
+                if g.get("type") == "gumus":
+                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "USD"}
+
+        elif "CEYREK" in norm:
+            for g in gold_list:
+                if g.get("type") == "ceyrek-altin":
+                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
+
+        elif "YARIM" in norm:
+            for g in gold_list:
+                if g.get("type") == "yarim-altin":
+                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
+
+        elif "TAM" in norm:
+            for g in gold_list:
+                if g.get("type") == "tam-altin":
+                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
+
+        elif any(k in norm for k in ["CUMHURIYET", "ATA"]):
+            for g in gold_list:
+                if g.get("type") == "cumhuriyet-altini":
+                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
+
+        elif any(k in norm for k in ["BILEZIK", "22AYAR"]):
+            for g in gold_list:
+                if g.get("type") == "22-ayar-bilezik":
+                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
+
+        elif "GUMUS" in norm or "SILVER" in norm:
+            for g in gold_list:
+                if g.get("type") == "gumus":
+                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
+
+        elif any(k in norm for k in ["GRAM", "ALTIN", "GLD", "GA"]):
+            for g in gold_list:
+                if g.get("type") == "gram-altin":
+                    return {"symbol": raw, "price": g.get("price"), "change": g.get("change", 0.0), "currency": "TRY"}
 
         # 3. Kripto Paralar (Binance & CoinGecko)
         for c in (self.get("category:crypto") or []):
             c_sym = c.get("symbol", "").upper().strip()
-            if c_sym in [raw, clean]:
-                is_try = raw.endswith("/TRY") or raw.endswith("/TL")
+            if c_sym in [raw, clean, norm]:
+                is_try = raw.endswith("/TRY") or raw.endswith("/TL") or raw.endswith("TRY") or raw.endswith("TL")
                 price = c.get("price")
                 if is_try and c.get("vs_currency") == "USD" and price:
                     usd_rate = self.get_usd_rate()
@@ -278,7 +296,7 @@ class HybridMarketCache:
         # 4. BIST Hisseleri
         for b in (self.get("category:bist") or []):
             b_sym = b.get("symbol", "").upper().replace(".IS", "").strip()
-            if b_sym in [raw, clean, raw.replace(".IS", "")]:
+            if b_sym in [raw, clean, norm, raw.replace(".IS", "")]:
                 return {
                     "symbol": raw,
                     "price": b.get("price"),
@@ -289,7 +307,7 @@ class HybridMarketCache:
         # 5. ABD Hisseleri (S&P 500 / NASDAQ)
         for u in (self.get("category:us") or []):
             u_sym = u.get("symbol", "").upper().strip()
-            if u_sym in [raw, clean]:
+            if u_sym in [raw, clean, norm]:
                 return {
                     "symbol": raw,
                     "price": u.get("price"),

@@ -55,10 +55,10 @@ public class PortfolioController : ControllerBase
     }
 
     [HttpPost("batch-update-prices")]
-    public async Task<ActionResult> BatchUpdatePrices([FromBody] BatchUpdatePortfolioPricesCommand command)
+    public async Task<ActionResult<BatchUpdatePortfolioResultDto>> BatchUpdatePrices([FromBody] BatchUpdatePortfolioPricesCommand command)
     {
-        var updatedCount = await _mediator.Send(command);
-        return Ok(new { success = true, updatedCount });
+        var result = await _mediator.Send(command);
+        return Ok(result);
     }
 
     [HttpPut("{id}")]

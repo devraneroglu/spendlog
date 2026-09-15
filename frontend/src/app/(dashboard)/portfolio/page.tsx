@@ -508,14 +508,14 @@ export default function PortfolioPage() {
       const activeItems = items.filter((i) => i.isActive);
       const uniqueSymbols = Array.from(new Set(activeItems.map((i) => i.symbol.toUpperCase().trim())));
       let priceUpdates: Array<{ symbol: string; price: number }> = [];
-      let currentUsdRate = usdRate > 0 ? usdRate : 34.50;
+      let currentUsdRate = usdRate > 0 ? usdRate : 48.64;
 
-      // 1. Tek ve Hızlı Toplu Önbellek Çağrısı (POST /api/prices/portfolio-lookup)
+      // 1. Hızlı Toplu Önbellek Çağrısı (POST /api/prices/portfolio-lookup)
       try {
         const lookupRes = await axios.post(
           'http://localhost:8000/api/prices/portfolio-lookup',
           { symbols: uniqueSymbols, include_usd_rate: true },
-          { timeout: 5000 }
+          { timeout: 8000 }
         );
 
         if (lookupRes.status === 200 && lookupRes.data) {
@@ -534,24 +534,29 @@ export default function PortfolioPage() {
           }
         }
       } catch (lookupErr) {
-        console.warn('Portfolio lookup cache endpoint failed, falling back...', lookupErr);
+        console.warn('Portfolio lookup direct call fallback; backend resolver will handle it...', lookupErr);
       }
 
       // 2. UI State'i Anında Canlı Fiyatlarla Güncelle (Optimistic UI - 0 ms)
       if (priceUpdates.length > 0) {
         const updateMap = new Map(priceUpdates.map((p) => [p.symbol.toUpperCase().trim(), p.price]));
+        const normalizeSym = (s: string) => s.toUpperCase().replace(/[\s\-_.]/g, '').replace(/(\/TL|\/TRY|\.IS|\.E)$/, '');
+        const normMap = new Map(priceUpdates.map((p) => [normalizeSym(p.symbol), p.price]));
+
         setItems((prev) =>
           prev.map((it) => {
             const clean = it.symbol.toUpperCase().trim();
-            if (updateMap.has(clean)) {
-              const newP = updateMap.get(clean)!;
+            const norm = normalizeSym(it.symbol);
+            const matchedPrice = updateMap.get(clean) ?? normMap.get(norm);
+
+            if (matchedPrice && matchedPrice > 0) {
               const newCost = it.cost;
-              const newVal = it.quantity * newP;
+              const newVal = it.quantity * matchedPrice;
               const newProfitLoss = newVal - newCost;
               const newProfitLossPercent = newCost > 0 ? (newProfitLoss / newCost) * 100 : 0;
               return {
                 ...it,
-                currentPrice: newP,
+                currentPrice: matchedPrice,
                 currentValue: newVal,
                 profitLoss: newProfitLoss,
                 profitLossPercent: newProfitLossPercent,
@@ -562,17 +567,42 @@ export default function PortfolioPage() {
         );
       }
 
-      // 3. Backend'e göndererek CurrentPrice ve PortfolioSnapshots'ı veritabanına işle
+      // 3. Backend'e göndererek CurrentPrice ve PortfolioSnapshots'ı veritabanına işle (Backend kendisi de eksikleri tamamlar)
       const res = await api.post('/api/portfolio/batch-update-prices', {
         prices: priceUpdates,
         usdToTryRate: currentUsdRate,
       });
 
-      // 4. Backend Summary ve Dağılımını Yeniden Yükle
-      await fetchPortfolioData(currentUsdRate);
+      // 4. Backend'den dönen güncel items, summary ve exchange rate verisini doğrudan state'e set et
+      if (res.data?.success) {
+        if (res.data.items && Array.isArray(res.data.items)) {
+          setItems(res.data.items);
+        }
+        if (res.data.summary) {
+          setSummary(res.data.summary);
+        }
+        if (res.data.usdToTryRate && res.data.usdToTryRate > 0) {
+          setUsdRate(res.data.usdToTryRate);
+        }
+      } else {
+        // Fallback: Eski usul fetch
+        await fetchPortfolioData(currentUsdRate);
+      }
+
+      // 5. Dağılım ve Snapshots geçmişini de tazeleyelim
+      const [distRes, snapRes] = await Promise.allSettled([
+        api.get<PortfolioDistribution>(`/api/portfolio/distribution?usdRate=${currentUsdRate}`),
+        api.get<PortfolioSnapshot[]>('/api/portfolio/snapshots'),
+      ]);
+      if (distRes.status === 'fulfilled' && distRes.value.data) {
+        setDistribution(distRes.value.data);
+      }
+      if (snapRes.status === 'fulfilled' && snapRes.value.data) {
+        setSnapshots(snapRes.value.data);
+      }
 
       const updatedCount = res.data?.updatedCount ?? priceUpdates.length;
-      toast.success(`Portföy başarıyla güncellendi! (${updatedCount} varlık önbellekten güncel fiyata çekildi)`);
+      toast.success(`Portföy başarıyla güncellendi! (${updatedCount} varlık güncel fiyata çekildi)`);
     } catch (err) {
       console.error('Failed to sync portfolio live prices', err);
       toast.error('Portföy güncellenirken bir hata oluştu.');
