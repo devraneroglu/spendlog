@@ -493,7 +493,22 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
 
         if (rate <= 0) rate = 48.64m;
 
-        // 1. Fiyatları Güncelle
+        // 1. Güncelleme öncesi varlık fiyatlarını ve son snapshot'ı hafızaya al
+        var previousItemPrices = activeItems.ToDictionary(
+            i => i.Id,
+            i => i.CurrentPrice > 0 ? i.CurrentPrice : i.PurchasePrice
+        );
+
+        var lastSnapshot = await _context.PortfolioSnapshots
+            .AsNoTracking()
+            .OrderByDescending(s => s.SnapshotDate)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        decimal previousRate = lastSnapshot != null && lastSnapshot.ExchangeRate > 0
+            ? lastSnapshot.ExchangeRate
+            : (rate > 0 ? rate : 48.64m);
+
+        // 2. Fiyatları Güncelle
         foreach (var item in activeItems)
         {
             var cleanSymbol = item.Symbol.Trim();
@@ -504,7 +519,7 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
             }
         }
 
-        // 2. Sembol Bazlı Konsolidasyon & Özet
+        // 3. Sembol Bazlı Konsolidasyon & Seans Farkı Özeti
         var symbolSummaries = activeItems
             .GroupBy(i => i.Symbol.Trim().ToUpperInvariant())
             .Select(g =>
@@ -512,13 +527,17 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
                 var sym = g.Key;
                 var first = g.First();
                 decimal totalQty = g.Sum(x => x.Quantity);
-                decimal oldPrice = first.PurchasePrice;
-                decimal curPrice = first.CurrentPrice;
-                decimal changePct = oldPrice > 0 ? ((curPrice - oldPrice) / oldPrice) * 100m : 0m;
 
-                decimal itemMultiplier = first.Currency == Currency.USD ? rate : (first.Currency == Currency.EUR ? rate * 1.08m : 1.0m);
-                decimal oldValTRY = g.Sum(x => x.Quantity * oldPrice * itemMultiplier);
-                decimal newValTRY = g.Sum(x => x.Quantity * curPrice * itemMultiplier);
+                // Önceki birim fiyat: Eğer daha önce güncellendiyse previousItemPrices, yoksa alış fiyatı
+                decimal oldUnitPrice = previousItemPrices[first.Id];
+                decimal newUnitPrice = first.CurrentPrice;
+                decimal changePct = oldUnitPrice > 0 ? ((newUnitPrice - oldUnitPrice) / oldUnitPrice) * 100m : 0m;
+
+                decimal prevItemMultiplier = first.Currency == Currency.USD ? previousRate : (first.Currency == Currency.EUR ? previousRate * 1.08m : 1.0m);
+                decimal curItemMultiplier = first.Currency == Currency.USD ? rate : (first.Currency == Currency.EUR ? rate * 1.08m : 1.0m);
+
+                decimal oldValTRY = g.Sum(x => x.Quantity * previousItemPrices[x.Id] * prevItemMultiplier);
+                decimal newValTRY = g.Sum(x => x.Quantity * x.CurrentPrice * curItemMultiplier);
                 decimal tlImpact = newValTRY - oldValTRY;
 
                 return new
@@ -527,8 +546,8 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
                     Name = first.Name,
                     Currency = first.Currency,
                     TotalQuantity = totalQty,
-                    OldPrice = oldPrice,
-                    NewPrice = curPrice,
+                    OldPrice = oldUnitPrice,
+                    NewPrice = newUnitPrice,
                     ChangePercent = changePct,
                     TlImpact = tlImpact,
                     CurrentValueTRY = newValTRY,
@@ -539,10 +558,24 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
             .ToList();
 
         decimal totalTRY = activeItems.Sum(i => i.CurrentValue * (i.Currency == Currency.USD ? rate : (i.Currency == Currency.EUR ? rate * 1.08m : 1.0m)));
-        decimal previousTotalTRY = activeItems.Sum(i => i.Cost * (i.Currency == Currency.USD ? rate : (i.Currency == Currency.EUR ? rate * 1.08m : 1.0m)));
+        decimal totalUSD = rate > 0 ? totalTRY / rate : 0;
+
+        // Gerçek "Önceki" Değeri: Son kaydedilen PortfolioSnapshot (yoksa güncelleme öncesi envanter toplamı)
+        decimal previousTotalTRY = lastSnapshot != null && lastSnapshot.TotalValueTRY > 0
+            ? lastSnapshot.TotalValueTRY
+            : activeItems.Sum(i => i.Quantity * previousItemPrices[i.Id] * (i.Currency == Currency.USD ? previousRate : (i.Currency == Currency.EUR ? previousRate * 1.08m : 1.0m)));
+
+        decimal previousTotalUSD = lastSnapshot != null && lastSnapshot.TotalValueUSD > 0
+            ? lastSnapshot.TotalValueUSD
+            : (previousRate > 0 ? previousTotalTRY / previousRate : 0m);
+
         decimal netDiffTRY = totalTRY - previousTotalTRY;
         decimal netDiffPercent = previousTotalTRY > 0 ? (netDiffTRY / previousTotalTRY) * 100m : 0m;
-        decimal totalUSD = rate > 0 ? totalTRY / rate : 0;
+
+        // Kümülatif Durum (Tarihi Alış Maliyetine Göre Genel Kâr/Zarar)
+        decimal portfolioCostTRY = activeItems.Sum(i => i.Cost * (i.Currency == Currency.USD ? rate : (i.Currency == Currency.EUR ? rate * 1.08m : 1.0m)));
+        decimal cumulativeProfitLossTRY = totalTRY - portfolioCostTRY;
+        decimal cumulativeProfitLossPercent = portfolioCostTRY > 0 ? (cumulativeProfitLossTRY / portfolioCostTRY) * 100m : 0m;
 
         if (activeItems.Any())
         {
@@ -569,7 +602,7 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
             _context.PortfolioSnapshots.Add(snapshot);
             await _context.SaveChangesAsync(cancellationToken);
 
-            // 📱 TELEGRAM BİLDİRİMİ (SEMBOL BAZLI KONSOLİDE ASCII TABLOSU)
+            // 📱 TELEGRAM BİLDİRİMİ (SEMBOL BAZLI KONSOLİDE ASCII TABLOSU & KÜMÜLATİF DİPNOT)
             if (_context is DbContext dbCtx)
             {
                 try
@@ -583,10 +616,15 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
                         var reportMsg = BuildAsciiPortfolioReport(
                             rate,
                             previousTotalTRY,
+                            previousTotalUSD,
                             totalTRY,
+                            totalUSD,
                             netDiffTRY,
                             netDiffPercent,
-                            symbolSummaries);
+                            symbolSummaries,
+                            portfolioCostTRY,
+                            cumulativeProfitLossTRY,
+                            cumulativeProfitLossPercent);
 
                         await _telegramNotificationService.SendMessageAsync(activeUser.TelegramChatId.Value, reportMsg, cancellationToken);
                     }
@@ -914,14 +952,16 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
     private static string BuildAsciiPortfolioReport(
         decimal rate,
         decimal previousTotalTRY,
+        decimal previousTotalUSD,
         decimal currentTotalTRY,
+        decimal currentTotalUSD,
         decimal netDiffTRY,
         decimal netDiffPercent,
-        IEnumerable<dynamic> symbolSummaries)
+        IEnumerable<dynamic> symbolSummaries,
+        decimal totalCostTRY,
+        decimal cumulativeProfitLossTRY,
+        decimal cumulativeProfitLossPercent)
     {
-        decimal previousTotalUSD = rate > 0 ? previousTotalTRY / rate : 0;
-        decimal currentTotalUSD = rate > 0 ? currentTotalTRY / rate : 0;
-
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("📊 *PORTFÖY GÜNCELLEME RAPORU*");
         sb.AppendLine($"📅 `{DateTime.Now:dd.MM.yyyy HH:mm}` | 💵 *USD/TL:* `{rate:N2} ₺`");
@@ -950,6 +990,10 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
         sb.AppendLine($"Güncel : {currentTotalTRY:N0} ₺ (${currentTotalUSD:N0})");
         sb.AppendLine($"Değişim: {diffSign}{netDiffTRY:N0} ₺ ({diffSign}{netDiffPercent:0.00}%)");
         sb.AppendLine("```");
+
+        string cumSign = cumulativeProfitLossTRY >= 0 ? "+" : "";
+        sb.AppendLine("📌 *Kümülatif Portföy Durumu:*");
+        sb.AppendLine($"Maliyet: `{totalCostTRY:N0} ₺` | Toplam K/Z: `{cumSign}{cumulativeProfitLossTRY:N0} ₺` (`{cumSign}{cumulativeProfitLossPercent:0.00}%`)");
 
         return sb.ToString();
     }
