@@ -343,6 +343,10 @@ export default function MarketsPage() {
   // İzleme Listeleri State & Konfigürasyon
   const [watchlistConfig, setWatchlistConfig] = useState<WatchlistConfig>(DEFAULT_WATCHLIST_CONFIG);
   const watchlistConfigRef = useRef<WatchlistConfig>(DEFAULT_WATCHLIST_CONFIG);
+  const bistStocksRef = useRef<any[]>(INITIAL_STOCKS);
+  const usStocksRef = useRef<any[]>(INITIAL_US_STOCKS);
+  const goldPricesRef = useRef<any[]>(INITIAL_GOLDS);
+  const cryptoPricesRef = useRef<any[]>(INITIAL_CRYPTOS);
   const [isWatchlistModalOpen, setIsWatchlistModalOpen] = useState(false);
   const [activeWatchlistTab, setActiveWatchlistTab] = useState<WatchlistCategory>('bist');
   const [editingConfig, setEditingConfig] = useState<WatchlistConfig>(DEFAULT_WATCHLIST_CONFIG);
@@ -446,75 +450,67 @@ export default function MarketsPage() {
             );
           }
 
-          // State'leri kullanıcının özelleştirdiği sıralama ve isimlerle güncelle
-          let updatedBist: any[] = [];
-          setBistStocks((prev: any[]) => {
-            const prevMap = new Map<string, any>(prev.map((s: any) => [s.symbol?.toUpperCase(), s]));
-            updatedBist = currentConfig.bist.map((item) => {
-              const sym = item.symbol.toUpperCase();
-              const sc = summaryBistMap.get(sym) || extraLookupMap.get(sym);
-              const pr = prevMap.get(sym);
-              return {
-                symbol: sym,
-                name: item.name || sc?.name || pr?.name || sym,
-                price: sc?.price ?? pr?.price ?? null,
-                change: sc?.change ?? pr?.change ?? 0.0,
-              };
-            });
-            return updatedBist;
+          // State'leri kullanıcının özelleştirdiği sıralama ve isimlerle senkron olarak güncelle
+          const prevBistMap = new Map<string, any>(bistStocksRef.current.map((s: any) => [s.symbol?.toUpperCase(), s]));
+          const updatedBist = currentConfig.bist.map((item) => {
+            const sym = item.symbol.toUpperCase();
+            const sc = summaryBistMap.get(sym) || extraLookupMap.get(sym);
+            const pr = prevBistMap.get(sym);
+            return {
+              symbol: sym,
+              name: item.name || sc?.name || pr?.name || sym,
+              price: sc?.price ?? pr?.price ?? null,
+              change: sc?.change ?? pr?.change ?? 0.0,
+            };
           });
+          bistStocksRef.current = updatedBist;
+          setBistStocks(updatedBist);
 
-          let updatedUs: any[] = [];
-          setUsStocks((prev: any[]) => {
-            const prevMap = new Map<string, any>(prev.map((u: any) => [u.symbol?.toUpperCase(), u]));
-            updatedUs = currentConfig.us.map((item) => {
-              const sym = item.symbol.toUpperCase();
-              const sc = summaryUsMap.get(sym) || extraLookupMap.get(sym);
-              const pr = prevMap.get(sym);
-              return {
-                symbol: sym,
-                querySym: item.querySym || sym,
-                name: item.name || sc?.name || pr?.name || sym,
-                price: sc?.price ?? pr?.price ?? null,
-                change: sc?.change ?? pr?.change ?? 0.0,
-              };
-            });
-            return updatedUs;
+          const prevUsMap = new Map<string, any>(usStocksRef.current.map((u: any) => [u.symbol?.toUpperCase(), u]));
+          const updatedUs = currentConfig.us.map((item) => {
+            const sym = item.symbol.toUpperCase();
+            const sc = summaryUsMap.get(sym) || extraLookupMap.get(sym);
+            const pr = prevUsMap.get(sym);
+            return {
+              symbol: sym,
+              querySym: item.querySym || sym,
+              name: item.name || sc?.name || pr?.name || sym,
+              price: sc?.price ?? pr?.price ?? null,
+              change: sc?.change ?? pr?.change ?? 0.0,
+            };
           });
+          usStocksRef.current = updatedUs;
+          setUsStocks(updatedUs);
 
-          let updatedGold: any[] = [];
-          setGoldPrices((prev: any[]) => {
-            const prevMap = new Map<string, any>(prev.map((g: any) => [g.type?.toLowerCase(), g]));
-            updatedGold = currentConfig.gold.map((item) => {
-              const t = item.type.toLowerCase();
-              const sc = summaryGoldMap.get(t);
-              const pr = prevMap.get(t);
-              return {
-                type: item.type,
-                label: item.label || sc?.label || pr?.label || item.type,
-                price: sc?.price ?? pr?.price ?? null,
-                change: sc?.change ?? pr?.change ?? 0.0,
-              };
-            });
-            return updatedGold;
+          const prevGoldMap = new Map<string, any>(goldPricesRef.current.map((g: any) => [g.type?.toLowerCase(), g]));
+          const updatedGold = currentConfig.gold.map((item) => {
+            const t = item.type.toLowerCase();
+            const sc = summaryGoldMap.get(t);
+            const pr = prevGoldMap.get(t);
+            return {
+              type: item.type,
+              label: item.label || sc?.label || pr?.label || item.type,
+              price: sc?.price ?? pr?.price ?? null,
+              change: sc?.change ?? pr?.change ?? 0.0,
+            };
           });
+          goldPricesRef.current = updatedGold;
+          setGoldPrices(updatedGold);
 
-          let updatedCrypto: any[] = [];
-          setCryptoPrices((prev: any[]) => {
-            const prevMap = new Map<string, any>(prev.map((c: any) => [c.symbol?.toUpperCase(), c]));
-            updatedCrypto = currentConfig.crypto.map((item) => {
-              const sym = item.symbol.toUpperCase();
-              const sc = summaryCryptoMap.get(sym) || extraLookupMap.get(sym);
-              const pr = prevMap.get(sym);
-              return {
-                symbol: sym,
-                name: item.name || sc?.name || pr?.name || sym,
-                price: sc?.price ?? pr?.price ?? null,
-                change: sc?.change ?? pr?.change ?? 0.0,
-              };
-            });
-            return updatedCrypto;
+          const prevCryptoMap = new Map<string, any>(cryptoPricesRef.current.map((c: any) => [c.symbol?.toUpperCase(), c]));
+          const updatedCrypto = currentConfig.crypto.map((item) => {
+            const sym = item.symbol.toUpperCase();
+            const sc = summaryCryptoMap.get(sym) || extraLookupMap.get(sym);
+            const pr = prevCryptoMap.get(sym);
+            return {
+              symbol: sym,
+              name: item.name || sc?.name || pr?.name || sym,
+              price: sc?.price ?? pr?.price ?? null,
+              change: sc?.change ?? pr?.change ?? 0.0,
+            };
           });
+          cryptoPricesRef.current = updatedCrypto;
+          setCryptoPrices(updatedCrypto);
 
           let updatedRates = currencyRates;
           if (data.currency) {
@@ -640,7 +636,7 @@ export default function MarketsPage() {
         axios.get('http://localhost:8000/api/prices/central-banks'),
       ]);
 
-      let newStocks = bistStocks;
+      let newStocks = bistStocksRef.current;
       if (stockResults.status === 'fulfilled' && stockResults.value.length > 0) {
         newStocks = stockResults.value.map((s, idx) => ({
           symbol: currentConfig.bist[idx]?.symbol || s.symbol,
@@ -648,10 +644,11 @@ export default function MarketsPage() {
           price: s.price ?? null,
           change: s.change ?? 0.0,
         }));
+        bistStocksRef.current = newStocks;
         setBistStocks(newStocks);
       }
 
-      let newUsStocks = usStocks;
+      let newUsStocks = usStocksRef.current;
       if (usResults.status === 'fulfilled' && usResults.value.length > 0) {
         newUsStocks = usResults.value.map((u, idx) => ({
           symbol: currentConfig.us[idx]?.symbol || u.symbol,
@@ -659,10 +656,11 @@ export default function MarketsPage() {
           price: u.price ?? null,
           change: u.change ?? 0.0,
         }));
+        usStocksRef.current = newUsStocks;
         setUsStocks(newUsStocks);
       }
 
-      let newGolds = goldPrices;
+      let newGolds = goldPricesRef.current;
       if (goldResults.status === 'fulfilled' && goldResults.value.length > 0) {
         newGolds = goldResults.value.map((g, idx) => ({
           type: currentConfig.gold[idx]?.type || g.type,
@@ -670,10 +668,11 @@ export default function MarketsPage() {
           price: g.price ?? null,
           change: g.change ?? 0.0,
         }));
+        goldPricesRef.current = newGolds;
         setGoldPrices(newGolds);
       }
 
-      let newCryptos = cryptoPrices;
+      let newCryptos = cryptoPricesRef.current;
       if (cryptoResults.status === 'fulfilled' && cryptoResults.value.length > 0) {
         newCryptos = cryptoResults.value.map((c, idx) => ({
           symbol: currentConfig.crypto[idx]?.symbol || c.symbol,
@@ -681,6 +680,7 @@ export default function MarketsPage() {
           price: c.price ?? null,
           change: c.change ?? 0.0,
         }));
+        cryptoPricesRef.current = newCryptos;
         setCryptoPrices(newCryptos);
       }
 
@@ -814,10 +814,22 @@ export default function MarketsPage() {
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          if (parsed.stocks) setBistStocks(parsed.stocks);
-          if (parsed.usStocks) setUsStocks(parsed.usStocks);
-          if (parsed.golds) setGoldPrices(parsed.golds);
-          if (parsed.cryptos) setCryptoPrices(parsed.cryptos);
+          if (Array.isArray(parsed.stocks) && parsed.stocks.length > 0) {
+            setBistStocks(parsed.stocks);
+            bistStocksRef.current = parsed.stocks;
+          }
+          if (Array.isArray(parsed.usStocks) && parsed.usStocks.length > 0) {
+            setUsStocks(parsed.usStocks);
+            usStocksRef.current = parsed.usStocks;
+          }
+          if (Array.isArray(parsed.golds) && parsed.golds.length > 0) {
+            setGoldPrices(parsed.golds);
+            goldPricesRef.current = parsed.golds;
+          }
+          if (Array.isArray(parsed.cryptos) && parsed.cryptos.length > 0) {
+            setCryptoPrices(parsed.cryptos);
+            cryptoPricesRef.current = parsed.cryptos;
+          }
           if (parsed.rates) setCurrencyRates(parsed.rates);
           if (parsed.indices) {
             setIndices({
@@ -1480,182 +1492,285 @@ export default function MarketsPage() {
       {/* Market Sections (4 Kolon) */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {/* Kolon 1: BIST Hisseleri */}
-        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-sm text-white flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-indigo-400" />
-              <span>BIST Hisseleri</span>
-            </h3>
-            <div className="flex items-center gap-2">
-              <span
-                className={`inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full font-mono font-bold border transition-colors ${
-                  bistSession.isOpen
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                    : 'bg-slate-800 text-slate-400 border-slate-700/60'
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${bistSession.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                {bistSession.label}
-              </span>
-              <button
-                onClick={() => openWatchlistModal('bist')}
-                title="BIST Hisseleri Listesini Düzenle"
-                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 transition cursor-pointer"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
-              </button>
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-800/60">
-            {bistStocks.map((s, idx) => (
-              <div key={idx} className="flex items-center justify-between py-2.5 px-2 hover:bg-slate-800/40 rounded-xl transition">
-                <div className="min-w-0 pr-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-xs text-white">{s.symbol}</span>
-                    {s.name && <span className="text-[10px] text-slate-500 font-normal truncate max-w-[85px]">{s.name}</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-bold text-xs text-slate-200 font-mono">
-                    {isValuesHidden ? '***' : (s.price != null ? `${s.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺` : '—')}
-                  </span>
-                  <ChangeBadge change={s.change} />
-                </div>
+        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl min-h-[380px] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-indigo-400" />
+                <span>BIST Hisseleri</span>
+              </h3>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full font-mono font-bold border transition-colors ${
+                    bistSession.isOpen
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700/60'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${bistSession.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                  {bistSession.label}
+                </span>
+                <button
+                  onClick={() => openWatchlistModal('bist')}
+                  title="BIST Hisseleri Listesini Düzenle"
+                  className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 transition cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
+                </button>
               </div>
-            ))}
+            </div>
+
+            <div className="divide-y divide-slate-800/60">
+              {bistStocks.length === 0 ? (
+                <div className="space-y-3 py-1">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-1 animate-pulse">
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-12 bg-slate-800 rounded"></div>
+                        <div className="h-3 w-16 bg-slate-800/60 rounded"></div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-14 bg-slate-800 rounded"></div>
+                        <div className="h-4 w-12 bg-slate-800/80 rounded-lg"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                bistStocks.map((s, idx) => (
+                  <div key={idx} className="flex items-center justify-between py-2.5 px-2 hover:bg-slate-800/40 rounded-xl transition">
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-white">{s.symbol}</span>
+                        {s.name && <span className="text-[10px] text-slate-500 font-normal truncate max-w-[85px]">{s.name}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {s.price != null ? (
+                        <>
+                          <span className="font-bold text-xs text-slate-200 font-mono">
+                            {isValuesHidden ? '***' : `${s.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺`}
+                          </span>
+                          <ChangeBadge change={s.change} />
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1.5 animate-pulse">
+                          <div className="h-3.5 w-14 bg-slate-800 rounded"></div>
+                          <div className="h-4 w-12 bg-slate-800/60 rounded-lg"></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
         {/* Kolon 2: Serbest Piyasa Altın */}
-        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-sm text-white flex items-center gap-2">
-              <Flame className="w-4 h-4 text-amber-400" />
-              <span>Serbest Piyasa Altın</span>
-            </h3>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => openWatchlistModal('gold')}
-                title="Altın & Emtia Listesini Düzenle"
-                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 transition cursor-pointer"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
-              </button>
+        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl min-h-[380px] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-400" />
+                <span>Serbest Piyasa Altın</span>
+              </h3>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => openWatchlistModal('gold')}
+                  title="Altın & Emtia Listesini Düzenle"
+                  className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 transition cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="divide-y divide-slate-800/60">
-            {goldPrices.map((g, idx) => {
-              const isOns = g.type === 'ons-altin' || g.label?.includes('ONS');
-              return (
-                <div key={idx} className="flex items-center justify-between py-2.5 px-2 hover:bg-slate-800/40 rounded-xl transition">
-                  <div className="min-w-0 pr-2">
-                    <span className="font-medium text-xs text-slate-300 block truncate">
-                      {g.label || g.type.replace('-', ' ')}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-bold text-xs text-amber-400 font-mono">
-                      {isValuesHidden ? '***' : (g.price != null
-                        ? `${g.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${isOns ? '$' : '₺'}`
-                        : '—')}
-                    </span>
-                    <ChangeBadge change={g.change} />
-                  </div>
+            <div className="divide-y divide-slate-800/60">
+              {goldPrices.length === 0 ? (
+                <div className="space-y-3 py-1">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-1 animate-pulse">
+                      <div className="h-4 w-28 bg-slate-800 rounded"></div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-16 bg-slate-800 rounded"></div>
+                        <div className="h-4 w-12 bg-slate-800/80 rounded-lg"></div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
+              ) : (
+                goldPrices.map((g, idx) => {
+                  const isOns = g.type === 'ons-altin' || g.label?.includes('ONS');
+                  return (
+                    <div key={idx} className="flex items-center justify-between py-2.5 px-2 hover:bg-slate-800/40 rounded-xl transition">
+                      <div className="min-w-0 pr-2">
+                        <span className="font-medium text-xs text-slate-300 block truncate">
+                          {g.label || g.type.replace('-', ' ')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {g.price != null ? (
+                          <>
+                            <span className="font-bold text-xs text-amber-400 font-mono">
+                              {isValuesHidden ? '***' : `${g.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${isOns ? '$' : '₺'}`}
+                            </span>
+                            <ChangeBadge change={g.change} />
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-1.5 animate-pulse">
+                            <div className="h-3.5 w-16 bg-slate-800 rounded"></div>
+                            <div className="h-4 w-12 bg-slate-800/60 rounded-lg"></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
 
         {/* Kolon 3: Kripto Paralar (Binance) */}
-        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-sm text-white flex items-center gap-2">
-              <Coins className="w-4 h-4 text-emerald-400" />
-              <span>Kripto Paralar</span>
-            </h3>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => openWatchlistModal('crypto')}
-                title="Kripto Para Listesini Düzenle"
-                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 transition cursor-pointer"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
-              </button>
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-800/60">
-            {cryptoPrices.map((c, idx) => (
-              <div key={idx} className="flex items-center justify-between py-2.5 px-2 hover:bg-slate-800/40 rounded-xl transition">
-                <div className="min-w-0 pr-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-xs text-white">{c.symbol}</span>
-                    {c.name && <span className="text-[10px] text-slate-500 font-normal">({c.name})</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-bold text-xs text-emerald-400 font-mono">
-                    {isValuesHidden ? '***' : (c.price != null
-                      ? `$${c.price.toLocaleString('en-US', { minimumFractionDigits: c.price < 10 ? 3 : 2, maximumFractionDigits: c.price < 10 ? 3 : 2 })}`
-                      : '—')}
-                  </span>
-                  <ChangeBadge change={c.change} />
-                </div>
+        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl min-h-[380px] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <Coins className="w-4 h-4 text-emerald-400" />
+                <span>Kripto Paralar</span>
+              </h3>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => openWatchlistModal('crypto')}
+                  title="Kripto Para Listesini Düzenle"
+                  className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 transition cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
+                </button>
               </div>
-            ))}
+            </div>
+
+            <div className="divide-y divide-slate-800/60">
+              {cryptoPrices.length === 0 ? (
+                <div className="space-y-3 py-1">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-1 animate-pulse">
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-10 bg-slate-800 rounded"></div>
+                        <div className="h-3 w-16 bg-slate-800/60 rounded"></div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-14 bg-slate-800 rounded"></div>
+                        <div className="h-4 w-12 bg-slate-800/80 rounded-lg"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                cryptoPrices.map((c, idx) => (
+                  <div key={idx} className="flex items-center justify-between py-2.5 px-2 hover:bg-slate-800/40 rounded-xl transition">
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-white">{c.symbol}</span>
+                        {c.name && <span className="text-[10px] text-slate-500 font-normal">({c.name})</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {c.price != null ? (
+                        <>
+                          <span className="font-bold text-xs text-emerald-400 font-mono">
+                            {isValuesHidden ? '***' : `$${c.price.toLocaleString('en-US', { minimumFractionDigits: c.price < 10 ? 3 : 2, maximumFractionDigits: c.price < 10 ? 3 : 2 })}`}
+                          </span>
+                          <ChangeBadge change={c.change} />
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1.5 animate-pulse">
+                          <div className="h-3.5 w-14 bg-slate-800 rounded"></div>
+                          <div className="h-4 w-12 bg-slate-800/60 rounded-lg"></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
         {/* Kolon 4: ABD Hisseleri */}
-        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-sm text-white flex items-center gap-2">
-              <Globe className="w-4 h-4 text-purple-400" />
-              <span>ABD Hisseleri</span>
-            </h3>
-            <div className="flex items-center gap-2">
-              <span
-                className={`inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full font-mono font-bold border transition-colors ${
-                  usSession.isOpen
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                    : 'bg-slate-800 text-slate-400 border-slate-700/60'
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${usSession.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                {usSession.label}
-              </span>
-              <button
-                onClick={() => openWatchlistModal('us')}
-                title="ABD Hisseleri Listesini Düzenle"
-                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 transition cursor-pointer"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
-              </button>
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-800/60">
-            {usStocks.map((u, idx) => (
-              <div key={idx} className="flex items-center justify-between py-2.5 px-2 hover:bg-slate-800/40 rounded-xl transition">
-                <div className="min-w-0 pr-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-xs text-white">{u.symbol}</span>
-                    {u.name && <span className="text-[10px] text-slate-500 font-normal truncate max-w-[85px]">{u.name}</span>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-bold text-xs text-purple-300 font-mono">
-                    {isValuesHidden ? '***' : (u.price != null
-                      ? `$${u.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : '—')}
-                  </span>
-                  <ChangeBadge change={u.change} />
-                </div>
+        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl min-h-[380px] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <Globe className="w-4 h-4 text-purple-400" />
+                <span>ABD Hisseleri</span>
+              </h3>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full font-mono font-bold border transition-colors ${
+                    usSession.isOpen
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700/60'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${usSession.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                  {usSession.label}
+                </span>
+                <button
+                  onClick={() => openWatchlistModal('us')}
+                  title="ABD Hisseleri Listesini Düzenle"
+                  className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 transition cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
+                </button>
               </div>
-            ))}
+            </div>
+
+            <div className="divide-y divide-slate-800/60">
+              {usStocks.length === 0 ? (
+                <div className="space-y-3 py-1">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 px-1 animate-pulse">
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-12 bg-slate-800 rounded"></div>
+                        <div className="h-3 w-16 bg-slate-800/60 rounded"></div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-14 bg-slate-800 rounded"></div>
+                        <div className="h-4 w-12 bg-slate-800/80 rounded-lg"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                usStocks.map((u, idx) => (
+                  <div key={idx} className="flex items-center justify-between py-2.5 px-2 hover:bg-slate-800/40 rounded-xl transition">
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-white">{u.symbol}</span>
+                        {u.name && <span className="text-[10px] text-slate-500 font-normal truncate max-w-[85px]">{u.name}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {u.price != null ? (
+                        <>
+                          <span className="font-bold text-xs text-purple-300 font-mono">
+                            {isValuesHidden ? '***' : `$${u.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                          </span>
+                          <ChangeBadge change={u.change} />
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1.5 animate-pulse">
+                          <div className="h-3.5 w-14 bg-slate-800 rounded"></div>
+                          <div className="h-4 w-12 bg-slate-800/60 rounded-lg"></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

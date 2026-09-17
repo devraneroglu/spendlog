@@ -130,10 +130,24 @@ async def get_markets_summary():
     if cached and all(k in cached for k in required_keys) and len(cached.get("bist", [])) > 0:
         return cached
 
-    bist_symbols = ['THYAO', 'GARAN', 'AKBNK', 'ASELS', 'SISE', 'EREGL', 'TUPRS', 'KCHOL']
-    us_symbols = ['NVDA', 'AAPL', 'MSFT', 'TSLA', 'AMZN', 'GOOGL', 'META', 'NFLX']
-    gold_types = ['gram-altin', 'ceyrek-altin', 'yarim-altin', 'tam-altin', 'cumhuriyet-altini', 'ons-altin', '22-ayar-bilezik', 'gumus']
-    crypto_symbols = ['BTC', 'ETH', 'SOL', 'AVAX', 'BNB', 'XRP', 'AAVE', 'HYPE', 'RAIL', 'SYRUP']
+    bist_symbols = [
+        'THYAO', 'GARAN', 'AKBNK', 'ASELS', 'SISE', 'EREGL', 'TUPRS', 'KCHOL',
+        'ENJSA', 'ISMEN', 'TRGYO', 'ENKAI', 'ISCTR', 'BIMAS', 'PETKM', 'SAHOL',
+        'TCELL', 'KRDMD', 'FROTO', 'YKBNK', 'PGSUS'
+    ]
+    us_symbols = [
+        'NVDA', 'AAPL', 'MSFT', 'TSLA', 'AMZN', 'GOOGL', 'META', 'NFLX',
+        'AVGO', 'PLTR', 'AMD', 'INTC', 'COIN', 'DIS', 'ARM', 'BABA', 'UBER', 'PYPL', 'SMCI'
+    ]
+    gold_types = [
+        'gram-altin', 'ceyrek-altin', 'yarim-altin', 'tam-altin', 'cumhuriyet-altini',
+        'ons-altin', '22-ayar-bilezik', 'gumus', 'ata-altin', 'resat-altin', 'has-altin',
+        '14-ayar-altin', '18-ayar-altin'
+    ]
+    crypto_symbols = [
+        'BTC', 'ETH', 'SOL', 'AVAX', 'BNB', 'XRP', 'AAVE', 'HYPE', 'RAIL', 'SYRUP',
+        'UNI', 'DOGE', 'ADA', 'LINK', 'DOT', 'NEAR', 'PEPE', 'SUI', 'SHIB', 'LTC'
+    ]
 
     async def fetch_all():
         bist_tasks = [scraper_service.get_stock_data(s) for s in bist_symbols]

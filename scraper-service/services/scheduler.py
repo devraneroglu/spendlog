@@ -235,7 +235,9 @@ class DynamicSchedulerService:
                     triggered.append(key)
 
         if tasks:
-            asyncio.create_task(asyncio.gather(*tasks, return_exceptions=True))
+            async def _run_all():
+                await asyncio.gather(*tasks, return_exceptions=True)
+            asyncio.create_task(_run_all())
 
         return {"triggered_count": len(triggered), "jobs": triggered}
 
@@ -270,24 +272,36 @@ class DynamicSchedulerService:
         start_t = time.time()
         self._set_running("BIST_STOCKS")
         try:
-            symbols = ["THYAO", "GARAN", "AKBNK", "ASELS", "SISE", "EREGL", "TUPRS", "KCHOL"]
-            results = {}
-            for sym in symbols:
-                res = await self.scrapers.get_stock_data(sym)
-                if res and res.get("price") is not None:
-                    results[sym] = res
-            xu = await self.scrapers.get_stock_data("XU100")
-            if xu and xu.get("price") is not None:
-                results["XU100"] = xu
-
-            # Sektör Endeksleri (XBANK, XHOLD, XUSIN, XULAS, XGMYO)
+            symbols = [
+                "THYAO", "GARAN", "AKBNK", "ASELS", "SISE", "EREGL", "TUPRS", "KCHOL",
+                "ENJSA", "ISMEN", "TRGYO", "ENKAI", "ISCTR", "BIMAS", "SAHOL", "TCELL"
+            ]
+            stock_tasks = [self.scrapers.get_stock_data(sym) for sym in symbols]
+            xu_task = self.scrapers.get_stock_data("XU100")
             sector_symbols = ["XBANK", "XHOLD", "XUSIN", "XULAS", "XGMYO"]
             sector_tasks = [self.scrapers.get_stock_data(s) for s in sector_symbols]
-            sector_res = await asyncio.gather(*sector_tasks, return_exceptions=True)
+
+            stock_res, xu, sector_res = await asyncio.gather(
+                asyncio.gather(*stock_tasks, return_exceptions=True),
+                xu_task,
+                asyncio.gather(*sector_tasks, return_exceptions=True),
+                return_exceptions=True
+            )
+
+            results = {}
+            if isinstance(stock_res, (list, tuple)):
+                for sym, res in zip(symbols, stock_res):
+                    if isinstance(res, dict) and res.get("price") is not None:
+                        results[sym] = res
+
+            if isinstance(xu, dict) and xu.get("price") is not None:
+                results["XU100"] = xu
+
             sectors_dict = {}
-            for s, r in zip(sector_symbols, sector_res):
-                if isinstance(r, dict) and r.get("price") is not None:
-                    sectors_dict[s] = r
+            if isinstance(sector_res, (list, tuple)):
+                for s, r in zip(sector_symbols, sector_res):
+                    if isinstance(r, dict) and r.get("price") is not None:
+                        sectors_dict[s] = r
 
             self.latest_prices["bist"] = results
             market_cache.update_market_category("bist", list(results.values()))
@@ -311,22 +325,30 @@ class DynamicSchedulerService:
         start_t = time.time()
         self._set_running("US_STOCKS")
         try:
-            symbols = ["NVDA", "AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "META", "NFLX"]
+            symbols = [
+                "NVDA", "AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "META", "NFLX",
+                "AVGO", "PLTR", "AMD", "INTC", "COIN"
+            ]
+            tasks = [self.scrapers.get_stock_data(sym) for sym in symbols]
+            sp_task = self.scrapers.get_stock_data("^GSPC")
+            nq_task = self.scrapers.get_stock_data("^IXIC")
+
+            stock_res, sp, nq = await asyncio.gather(
+                asyncio.gather(*tasks, return_exceptions=True),
+                sp_task,
+                nq_task,
+                return_exceptions=True
+            )
+
             results = {}
-            for sym in symbols:
-                res = await self.scrapers.get_stock_data(sym)
-                if res and res.get("price") is not None:
-                    results[sym] = res
+            if isinstance(stock_res, (list, tuple)):
+                for sym, res in zip(symbols, stock_res):
+                    if isinstance(res, dict) and res.get("price") is not None:
+                        results[sym] = res
 
             self.latest_prices["us_stocks"] = results
             market_cache.update_market_category("us", list(results.values()))
 
-            # Endeksleri de güncelle
-            sp, nq = await asyncio.gather(
-                self.scrapers.get_stock_data("^GSPC"),
-                self.scrapers.get_stock_data("^IXIC"),
-                return_exceptions=True
-            )
             indices = market_cache.get("category:indices") or {}
             if isinstance(sp, dict) and sp.get("price"): indices["SP500"] = sp
             if isinstance(nq, dict) and nq.get("price"): indices["NASDAQ"] = nq
