@@ -65,6 +65,9 @@ app.include_router(get_scheduler_router(scheduler_service))
 async def startup_event():
     scraper_logger.info("🚀 SpendLog V2 Python Scraper Mikroservisi Başlatıldı.")
     scheduler_service.start()
+    # Başlangıçta önbelleği arka planda otomatik ısıt (Cold-Start Prevention)
+    import asyncio
+    asyncio.create_task(scheduler_service.trigger_all_jobs())
 
 @app.get("/")
 def root():

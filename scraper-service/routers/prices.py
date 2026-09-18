@@ -219,9 +219,8 @@ async def get_markets_summary():
         "central_banks": central_banks_data
     }
 
-    # Merkezi hibrit cache'i güncelle
-    for cat, val in summary_data.items():
-        market_cache.update_market_category(cat, val)
+    # Merkezi hibrit cache'i tek seferde atomik güncelle
+    market_cache.update_market_categories(summary_data)
 
     return summary_data
 

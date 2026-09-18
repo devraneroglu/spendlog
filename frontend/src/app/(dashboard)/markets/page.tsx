@@ -384,7 +384,7 @@ export default function MarketsPage() {
 
       // 1. Strateji: Tek ve Hızlı Özet Çağrısı (/api/prices/summary)
       try {
-        const summaryRes = await axios.get('http://localhost:8000/api/prices/summary', { timeout: 6000 });
+        const summaryRes = await axios.get('http://localhost:8000/api/prices/summary', { timeout: 12000 });
         if (summaryRes.status === 200 && summaryRes.data) {
           const data = summaryRes.data;
 
@@ -421,7 +421,7 @@ export default function MarketsPage() {
                   symbols: Array.from(new Set(missingStockAndCryptoSymbols)),
                   include_usd_rate: false,
                 },
-                { timeout: 5000 }
+                { timeout: 8000 }
               );
               if (lookupRes.data?.prices) {
                 lookupRes.data.prices.forEach((p: any) => {
@@ -439,7 +439,7 @@ export default function MarketsPage() {
             await Promise.allSettled(
               missingGoldTypes.map(async (g) => {
                 try {
-                  const gRes = await axios.get(`http://localhost:8000/api/prices/gold?type=${g.type}`, { timeout: 3500 });
+                  const gRes = await axios.get(`http://localhost:8000/api/prices/gold?type=${g.type}`, { timeout: 5000 });
                   if (gRes.data) {
                     summaryGoldMap.set(g.type.toLowerCase(), gRes.data);
                   }

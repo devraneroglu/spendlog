@@ -174,6 +174,15 @@ class HybridMarketCache:
         summary["last_updated_at"] = time.time()
         self.set("market:summary", summary, ttl=600)
 
+    def update_market_categories(self, categories: Dict[str, Any]):
+        """Birden çok kategori verisini tek seferde günceller ve merkezi summary'yi atomik işler."""
+        summary = self.get("market:summary") or {}
+        for category, data in categories.items():
+            self.set(f"category:{category}", data, ttl=600)
+            summary[category] = data
+        summary["last_updated_at"] = time.time()
+        self.set("market:summary", summary, ttl=600)
+
     def get_market_summary(self) -> Optional[Dict[str, Any]]:
         """Zamanlayıcının doldurduğu merkezi piyasa özetini döner."""
         return self.get("market:summary")
