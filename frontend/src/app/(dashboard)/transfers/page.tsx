@@ -25,6 +25,7 @@ import {
   AlertCircle,
   Search,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 
 export default function TransfersPage() {
@@ -33,6 +34,7 @@ export default function TransfersPage() {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -69,14 +71,20 @@ export default function TransfersPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
+      setFetchError(null);
       const [transfersRes, accountsRes] = await Promise.all([
         api.get<Transfer[]>('/api/transfers'),
         api.get<Account[]>('/api/accounts'),
       ]);
       setTransfers(transfersRes.data);
       setAccounts(accountsRes.data);
-    } catch (err) {
-      console.error('Failed to fetch transfers', err);
+    } catch (err: any) {
+      const isNetErr = !err.response && (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error'));
+      const msg = isNetErr
+        ? 'Sunucu bağlantısı kurulamadı. API servisinin çalıştığından emin olun.'
+        : 'Transfer kayıtları yüklenirken bir hata oluştu.';
+      setFetchError(msg);
+      console.warn('Transfer fetch warning:', msg);
     } finally {
       setIsLoading(false);
     }
@@ -218,6 +226,9 @@ export default function TransfersPage() {
     });
   };
 
+  const selectedFromAccountObj = accounts.find((a) => a.id === Number(fromAccountId));
+  const fromBalance = selectedFromAccountObj ? selectedFromAccountObj.currentBalance : 0;
+  const isAmountExceeding = Boolean(amount && Number(amount) > fromBalance && fromBalance > 0);
   const selectedTargetAccount = accounts.find((a) => a.id === Number(toAccountId));
   const isTargetCreditCard = selectedTargetAccount?.accountType === AccountType.CreditCard;
 
@@ -236,6 +247,23 @@ export default function TransfersPage() {
           </button>
         }
       />
+
+      {/* Network / Connection Error Banner */}
+      {fetchError && (
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 mb-6 flex items-center justify-between gap-3 text-rose-300 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 text-xs">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <button
+            onClick={fetchData}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 rounded-xl text-xs font-semibold transition cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Yeniden Dene</span>
+          </button>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-4 mb-6 shadow-md flex flex-wrap items-center justify-between gap-3">
@@ -496,17 +524,55 @@ export default function TransfersPage() {
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Transfer Tutarı (₺)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  required
-                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-400">Transfer Tutarı (₺)</label>
+                  {selectedFromAccountObj && (
+                    <button
+                      type="button"
+                      onClick={() => setAmount(Math.max(0, fromBalance).toFixed(2))}
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1 cursor-pointer font-medium"
+                      title="Kaynak hesaptaki tüm bakiyeyi aktarmak için tıklayın"
+                    >
+                      <span className="text-slate-400">Bakiye:</span>
+                      <span className="font-mono font-bold text-slate-200">
+                        {isValuesHidden ? '***' : `${fromBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺`}
+                      </span>
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    required
+                    className={`w-full bg-slate-950/60 border rounded-xl pl-3 pr-20 py-2 text-white text-xs font-mono focus:outline-none focus:ring-2 transition ${
+                      isAmountExceeding
+                        ? 'border-amber-500/60 focus:ring-amber-500'
+                        : 'border-slate-800 focus:ring-indigo-500'
+                    }`}
+                  />
+                  {selectedFromAccountObj && (
+                    <button
+                      type="button"
+                      onClick={() => setAmount(Math.max(0, fromBalance).toFixed(2))}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-indigo-500/15 hover:bg-indigo-500/25 active:scale-95 text-indigo-400 border border-indigo-500/30 rounded-lg text-[10px] font-bold font-mono transition cursor-pointer tracking-wider flex items-center gap-1"
+                      title="Kaynak hesaptaki tüm tutarı doldur"
+                    >
+                      <Sparkles className="w-3 h-3 text-indigo-400" />
+                      <span>TÜMÜ</span>
+                    </button>
+                  )}
+                </div>
+                {isAmountExceeding && (
+                  <p className="text-[11px] text-amber-400 mt-1.5 flex items-center gap-1 font-medium animate-in fade-in duration-200">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Girilen tutar kaynak hesap bakiyesini ({fromBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺) aşıyor.</span>
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
