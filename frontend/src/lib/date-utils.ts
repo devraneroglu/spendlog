@@ -53,3 +53,18 @@ export function toSafeApiDateString(dateStr: string): string {
   }
   return new Date(dateStr).toISOString();
 }
+
+/**
+ * FinTech standartlarında kısa tarih ve saat üretir (Örn: "20 Eyl • 01:42").
+ */
+export function formatShortDateTime(dateInput?: string | Date | null): string {
+  const d = dateInput ? new Date(dateInput) : new Date();
+  if (isNaN(d.getTime())) return '';
+  const months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  const day = d.getDate();
+  const month = months[d.getMonth()];
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${day} ${month} • ${hh}:${mm}`;
+}
+

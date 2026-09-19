@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Header } from '@/components/layout/Header';
 import { api } from '@/lib/axios';
 import { useAuthStore } from '@/store/auth-store';
+import { formatShortDateTime } from '@/lib/date-utils';
 import axios from 'axios';
 import {
   TrendingUp,
@@ -380,7 +381,7 @@ export default function MarketsPage() {
     if (!isBackground) setIsRefreshing(true);
     const currentConfig = overrideConfig || watchlistConfigRef.current || watchlistConfig;
     try {
-      const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      const now = formatShortDateTime();
 
       // 1. Strateji: Tek ve Hızlı Özet Çağrısı (/api/prices/summary)
       try {
@@ -1005,11 +1006,22 @@ export default function MarketsPage() {
         description="Canlı hisse senetleri, kıymetli madenler, kripto paralar ve serbest piyasa kurlarının anlık akışı"
         actions={
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Canlı Otomatik Senkronizasyon (30s)" />
-              <Clock className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Son Senkronizasyon: <strong className="text-white">{lastSyncTime}</strong></span>
-            </span>
+            <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl shadow-xs text-[11px] font-medium text-slate-400 h-[38px]">
+              {isRefreshing ? (
+                <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin shrink-0" />
+              ) : (
+                <span className="relative flex h-2 w-2 shrink-0" title="Canlı Otomatik Senkronizasyon (30s)">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+              )}
+              <span>
+                Son Güncelleme:{' '}
+                <strong className="text-slate-200 font-mono font-semibold ml-0.5">
+                  {lastSyncTime || 'Az önce'}
+                </strong>
+              </span>
+            </div>
 
             <button
               onClick={() => openWatchlistModal('bist')}

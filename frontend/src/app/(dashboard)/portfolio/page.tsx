@@ -13,7 +13,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useToast } from '@/components/ui/Toast';
 import { MoneyAmount } from '@/components/ui/MoneyAmount';
 import { lttbDownsample } from '@/lib/lttb';
-import { formatLocalDateToInput, toSafeApiDateString } from '@/lib/date-utils';
+import { formatLocalDateToInput, toSafeApiDateString, formatShortDateTime } from '@/lib/date-utils';
 import {
   TrendingUp,
   ArrowDownRight,
@@ -263,6 +263,7 @@ export default function PortfolioPage() {
   const [saleNote, setSaleNote] = useState('');
   const [isSelling, setIsSelling] = useState(false);
   const [isSyncingPrices, setIsSyncingPrices] = useState(false);
+  const [lastPortfolioSyncTime, setLastPortfolioSyncTime] = useState<string>('');
 
   // Price Alerts State (Badge count)
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
@@ -410,6 +411,9 @@ export default function PortfolioPage() {
       }
       if (snapRes.status === 'fulfilled' && snapRes.value.data) {
         setSnapshots(snapRes.value.data);
+        if (snapRes.value.data.length > 0 && snapRes.value.data[0].snapshotDate) {
+          setLastPortfolioSyncTime((prev) => prev || formatShortDateTime(snapRes.value.data[0].snapshotDate));
+        }
       }
       await fetchAlerts();
     } catch (err) {
@@ -602,6 +606,11 @@ export default function PortfolioPage() {
       }
 
       const updatedCount = res.data?.updatedCount ?? priceUpdates.length;
+      const syncStr = formatShortDateTime();
+      setLastPortfolioSyncTime(syncStr);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('spendlog_portfolio_sync_time', syncStr);
+      }
       toast.success(`Portföy başarıyla güncellendi! (${updatedCount} varlık güncel fiyata çekildi)`);
     } catch (err) {
       console.error('Failed to sync portfolio live prices', err);
@@ -614,6 +623,11 @@ export default function PortfolioPage() {
   useEffect(() => {
     let liveRate = 45.00;
     if (typeof window !== 'undefined') {
+      const savedSync = localStorage.getItem('spendlog_portfolio_sync_time');
+      if (savedSync) {
+        setLastPortfolioSyncTime(savedSync);
+      }
+
       const cached = localStorage.getItem('spendlog_market_cache');
       if (cached) {
         try {
@@ -1716,6 +1730,24 @@ export default function PortfolioPage() {
               >
                 $ USD
               </button>
+            </div>
+
+            {/* Son Güncelleme Rozeti */}
+            <div className="hidden sm:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl shadow-xs text-[11px] font-medium text-slate-400 h-[38px]">
+              {isSyncingPrices ? (
+                <Loader2 className="w-3.5 h-3.5 text-emerald-400 animate-spin shrink-0" />
+              ) : (
+                <span className="relative flex h-2 w-2 shrink-0" title="Portföy Fiyat Senkronizasyonu">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+              )}
+              <span>
+                Son Güncelleme:{' '}
+                <strong className="text-slate-200 font-mono font-semibold ml-0.5">
+                  {lastPortfolioSyncTime || 'Az önce'}
+                </strong>
+              </span>
             </div>
 
             {/* Portföyü Güncelle Butonu */}
