@@ -9,6 +9,7 @@ from services.alert_service import scraper_alert_service
 from routers.pdf import router as pdf_router
 from routers.prices import router as prices_router
 from routers.receipts import router as receipts_router
+from routers.reports import router as reports_router
 from routers.scheduler import get_scheduler_router
 
 app = FastAPI(
@@ -59,6 +60,7 @@ scheduler_service = DynamicSchedulerService(scraper_service)
 app.include_router(pdf_router)
 app.include_router(prices_router)
 app.include_router(receipts_router)
+app.include_router(reports_router)
 app.include_router(get_scheduler_router(scheduler_service))
 
 @app.on_event("startup")

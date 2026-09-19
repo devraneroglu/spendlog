@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SpendLogV2.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using SpendLogV2.Infrastructure.Data;
 namespace SpendLogV2.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(SpendLogDbContext))]
-    partial class SpendLogDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260919231442_AddSchedulerAndSendTypeToTelegramRules")]
+    partial class AddSchedulerAndSendTypeToTelegramRules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

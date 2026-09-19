@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddSingleton<IPriceCacheService, RedisPriceCacheService>();
 
         services.AddHostedService<TelegramBotService>();
+        services.AddHostedService<TelegramSchedulerBackgroundService>();
 
         return services;
     }

@@ -3,8 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { api } from '@/lib/axios';
-import { TelegramRule, TelegramActionType } from '@/types/telegram';
-import { Account, Category } from '@/types/finance';
+import {
+  TelegramRule,
+  TelegramSendType,
+  TelegramScheduleType,
+  TelegramFrequency,
+} from '@/types/telegram';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useToast } from '@/components/ui/Toast';
 import {
@@ -28,14 +32,14 @@ import {
   CreditCard,
   Wallet,
   Activity,
+  Clock,
+  FileText,
+  Image as ImageIcon,
+  FileSpreadsheet,
+  Layers,
+  Calendar,
+  Repeat,
 } from 'lucide-react';
-
-const ACTION_TYPE_LABELS: Record<TelegramActionType, string> = {
-  [TelegramActionType.QueryBalance]: 'Bakiye Sorgulama',
-  [TelegramActionType.AddExpense]: 'Harcama Ekle (Gider)',
-  [TelegramActionType.AddIncome]: 'Gelir Ekle',
-  [TelegramActionType.Transfer]: 'Hesaplar Arası Transfer',
-};
 
 interface BotStatus {
   hasCustomBot: boolean;
@@ -48,8 +52,6 @@ interface BotStatus {
 export default function TelegramRulesPage() {
   const toast = useToast();
   const [rules, setRules] = useState<TelegramRule[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Bot Status State
@@ -58,7 +60,7 @@ export default function TelegramRulesPage() {
   const [showToken, setShowToken] = useState(false);
   const [isConnectingBot, setIsConnectingBot] = useState(false);
 
-  // Akıllı Telegram Router: Masaüstü Telegram yüklüyse doğrudan Desktop'ı uyandırır, değilse tarayıcıda açar
+  // Akıllı Telegram Router: Masaüstü Telegram yüklüyse doğrudan Desktop'ı uyandırır
   const openTelegramApp = (username: string) => {
     if (!username) return;
     const cleanUsername = username.replace(/^@/, '');
@@ -66,10 +68,8 @@ export default function TelegramRulesPage() {
     const webUrl = `https://t.me/${cleanUsername}`;
 
     const start = Date.now();
-    // 1. İşletim sisteminde yüklü Telegram Desktop'ı çağırmayı dene
     window.location.href = tgProtocol;
 
-    // 2. Masaüstü uygulaması açılmazsa (pencere odağı kaybolmazsa) tarayıcı sekmesinde aç
     setTimeout(() => {
       if (!document.hidden && Date.now() - start < 1800) {
         window.open(webUrl, '_blank', 'noopener,noreferrer');
@@ -90,16 +90,17 @@ export default function TelegramRulesPage() {
     onConfirm: () => {},
   });
 
-  // Rule Modal State
+  // Rule Modal State (MSSQL Agent Scheduler & Gönderim Türü Tarzı)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<TelegramRule | null>(null);
   const [command, setCommand] = useState('');
-  const [pattern, setPattern] = useState('');
-  const [actionType, setActionType] = useState<TelegramActionType>(TelegramActionType.AddExpense);
-  const [targetAccountId, setTargetAccountId] = useState<number | ''>('');
-  const [targetCategoryId, setTargetCategoryId] = useState<number | ''>('');
-  const [responseTemplate, setResponseTemplate] = useState('');
-  const [isEnabled, setIsEnabled] = useState(true);
+  const [description, setDescription] = useState('');
+  const [sendType, setSendType] = useState<TelegramSendType>('Text');
+  const [scheduleType, setScheduleType] = useState<TelegramScheduleType>('Manual');
+  const [frequency, setFrequency] = useState<TelegramFrequency>('Daily');
+  const [executionTime, setExecutionTime] = useState('09:00');
+  const [intervalMinutes, setIntervalMinutes] = useState<number>(30);
+  const [isActive, setIsActive] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchBotStatus = async () => {
@@ -114,14 +115,8 @@ export default function TelegramRulesPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [rulesRes, accountsRes, categoriesRes] = await Promise.all([
-        api.get<TelegramRule[]>('/api/telegramrules'),
-        api.get<Account[]>('/api/accounts'),
-        api.get<Category[]>('/api/categories'),
-      ]);
+      const rulesRes = await api.get<TelegramRule[]>('/api/telegramrules');
       setRules(rulesRes.data);
-      setAccounts(accountsRes.data);
-      setCategories(categoriesRes.data);
       await fetchBotStatus();
     } catch (err) {
       console.error('Failed to fetch telegram data', err);
@@ -178,54 +173,75 @@ export default function TelegramRulesPage() {
 
   const openCreateModal = () => {
     setEditingRule(null);
-    setCommand('/harca');
-    setPattern('^/harca\\s+(?<amount>[\\d.,]+)\\s*(?<desc>.*)$');
-    setActionType(TelegramActionType.AddExpense);
-    setTargetAccountId(accounts[0]?.id || '');
-    setTargetCategoryId('');
-    setResponseTemplate('✅ {amount} ₺ harcamanız kaydedildi.');
-    setIsEnabled(true);
+    setCommand('');
+    setDescription('');
+    setSendType('Text');
+    setScheduleType('Manual');
+    setFrequency('Daily');
+    setExecutionTime('09:00');
+    setIntervalMinutes(30);
+    setIsActive(true);
     setIsModalOpen(true);
   };
 
   const openEditModal = (rule: TelegramRule) => {
     setEditingRule(rule);
     setCommand(rule.command);
-    setPattern(rule.pattern);
-    setActionType(rule.actionType);
-    setTargetAccountId(rule.targetAccountId || '');
-    setTargetCategoryId(rule.targetCategoryId || '');
-    setResponseTemplate(rule.responseMessageTemplate || '');
-    setIsEnabled(rule.isEnabled);
+    setDescription(rule.description || '');
+    setSendType(rule.sendType || 'Text');
+    setScheduleType(rule.scheduleType || 'Manual');
+    setFrequency(rule.frequency || 'Daily');
+    setExecutionTime(rule.executionTime || '09:00');
+    setIntervalMinutes(rule.intervalMinutes || 30);
+    setIsActive(rule.isActive);
     setIsModalOpen(true);
+  };
+
+  const toggleRuleStatus = async (rule: TelegramRule) => {
+    try {
+      const updatedStatus = !rule.isActive;
+      await api.put(`/api/telegramrules/${rule.id}`, {
+        ...rule,
+        isActive: updatedStatus,
+      });
+      setRules((prev) =>
+        prev.map((r) => (r.id === rule.id ? { ...r, isActive: updatedStatus } : r))
+      );
+      toast.success(`"${rule.command}" kuralı ${updatedStatus ? 'aktifleştirildi' : 'devre dışı bırakıldı'}.`);
+    } catch (err: any) {
+      toast.error('Kural durumu güncellenirken hata: ' + (err.response?.data?.detail || err.message));
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!command.trim()) {
+      toast.error('Lütfen bir komut veya tetikleyici anahtar kelime girin.');
+      return;
+    }
+
     setIsSaving(true);
     try {
+      const payload = {
+        command: command.trim(),
+        title: command.trim(),
+        description: description.trim(),
+        sendType,
+        scheduleType,
+        frequency,
+        executionTime,
+        intervalMinutes: scheduleType === 'Recurring' && frequency === 'Interval' ? Number(intervalMinutes) : null,
+        isActive,
+      };
+
       if (editingRule) {
         await api.put(`/api/telegramrules/${editingRule.id}`, {
           id: editingRule.id,
-          command,
-          pattern,
-          actionType,
-          targetAccountId: targetAccountId ? Number(targetAccountId) : null,
-          targetCategoryId: targetCategoryId ? Number(targetCategoryId) : null,
-          responseMessageTemplate: responseTemplate,
-          isEnabled,
+          ...payload,
         });
         toast.success('Telegram kuralı başarıyla güncellendi.');
       } else {
-        await api.post('/api/telegramrules', {
-          command,
-          pattern,
-          actionType,
-          targetAccountId: targetAccountId ? Number(targetAccountId) : null,
-          targetCategoryId: targetCategoryId ? Number(targetCategoryId) : null,
-          responseMessageTemplate: responseTemplate,
-          isEnabled,
-        });
+        await api.post('/api/telegramrules', payload);
         toast.success('Telegram kuralı başarıyla oluşturuldu.');
       }
       setIsModalOpen(false);
@@ -257,11 +273,91 @@ export default function TelegramRulesPage() {
     });
   };
 
+  const getScheduleSummary = (
+    sType: TelegramScheduleType,
+    freq: TelegramFrequency,
+    execTime: string,
+    intMin: number
+  ): string => {
+    if (sType === 'Manual') {
+      return 'Kullanıcı Telegram üzerinden komutu yazdığında anında tetiklenir.';
+    }
+    if (freq === 'Daily') {
+      return `Her gün saat ${execTime || '09:00'}'da otomatik olarak Telegram'a gönderilir.`;
+    }
+    if (freq === 'Weekly') {
+      return `Haftanın belirlenen günlerinde saat ${execTime || '09:00'}'da otomatik gönderilir.`;
+    }
+    if (freq === 'Interval') {
+      return `Günün her anında her ${intMin || 30} dakikada bir düzenli kontrol edilip gönderilir.`;
+    }
+    return '';
+  };
+
+  const renderSendTypeBadge = (st: TelegramSendType) => {
+    switch (st) {
+      case 'Image':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded-md">
+            <ImageIcon className="w-3 h-3 text-purple-400" />
+            <span>Görsel / Grafik</span>
+          </span>
+        );
+      case 'Pdf':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-rose-500/10 text-rose-300 border border-rose-500/20 px-2 py-0.5 rounded-md">
+            <FileSpreadsheet className="w-3 h-3 text-rose-400" />
+            <span>PDF Ekstresi</span>
+          </span>
+        );
+      case 'ChartAndPdf':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-md">
+            <Layers className="w-3 h-3 text-indigo-400" />
+            <span>Grafik + PDF</span>
+          </span>
+        );
+      case 'Text':
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700/60 px-2 py-0.5 rounded-md">
+            <FileText className="w-3 h-3 text-slate-400" />
+            <span>Metin</span>
+          </span>
+        );
+    }
+  };
+
+  const renderScheduleBadge = (rule: TelegramRule) => {
+    if (rule.scheduleType === 'Recurring') {
+      if (rule.frequency === 'Interval') {
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/25 px-2 py-0.5 rounded-md">
+            <Repeat className="w-3 h-3 text-cyan-400" />
+            <span>{rule.intervalMinutes || 30} dk arayla</span>
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded-md">
+          <Clock className="w-3 h-3 text-amber-400" />
+          <span>Günlük {rule.executionTime || '09:00'}</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+        <Terminal className="w-3 h-3 text-slate-500" />
+        <span>Tetikleyici / Komutla</span>
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Header
-        title="Kişisel Telegram Asistanı & Kural Merkezi"
-        description="Tamamen size özel Telegram botunuzu bağlayın, anlık harcama/bakiye komutlarını ve fiş OCR kurallarını yönetin"
+        title="Kişisel Telegram Asistanı & Görev Yönetimi"
+        description="Bot komutlarını, MSSQL Job Scheduler tarzı periyodik raporlamaları ve gönderim türlerini yönetin"
         actions={
           <button
             onClick={openCreateModal}
@@ -275,7 +371,6 @@ export default function TelegramRulesPage() {
 
       {/* 🤖 KİŞİSEL TELEGRAM BOT ENTEGRASYON KARTI */}
       {botStatus?.hasCustomBot ? (
-        /* DURUM A: BOT BAŞARIYLA BAĞLI VE DEVREDE */
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden p-6 bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/20 space-y-5">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
             <div className="flex items-center gap-3.5">
@@ -335,7 +430,7 @@ export default function TelegramRulesPage() {
                   <span>/bakiye</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Tüm banka, nakit ve yatırım hesaplarınızın güncel bakiyelerini ve toplam likit servetinizi döker.
+                  Sadece vadesiz banka hesaplarınızın bakiyelerini ve toplam likit tutarı döker.
                 </p>
               </div>
 
@@ -345,17 +440,17 @@ export default function TelegramRulesPage() {
                   <span>/kk 450 market</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Sıradaki canlı ekstre dönemine anında harcama notu ekler. Mükerrer harcama korumalıdır.
+                  Sıradaki canlı ekstre dönemine harcama notu ekler. Mükerrer korumalıdır.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
                 <div className="flex items-center gap-2 text-indigo-400 font-mono font-bold text-xs">
-                  <Camera className="w-3.5 h-3.5" />
-                  <span>Fiş Fotoğrafı / Yakıt</span>
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>2026-8 veya /rapor</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Akaryakıt fişi görselini doğrudan bota atın; Vision AI ile tutar, istasyon ve araç km'sini otomatik işler.
+                  Belirtilen ayın kategori harcama donut grafiğini (PNG) ve detaylı PDF dökümünü iletir.
                 </p>
               </div>
 
@@ -365,44 +460,41 @@ export default function TelegramRulesPage() {
                   <span>/durum</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Backend uptime, MSSQL ping süresi ve scraper mikroservisi çalışma durumunu anlık test eder.
+                  Backend uptime, MSSQL ping ve scraper mikroservis çalışma durumunu test eder.
                 </p>
               </div>
             </div>
           </div>
         </div>
       ) : (
-        /* DURUM B: HENÜZ BOT BAĞLI DEĞİL — 3 ADIMLI ŞIK KURULUM SİHİRBAZI */
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden p-6 space-y-6">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2.5 mb-1.5">
               <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
                 <Sparkles className="w-4 h-4" />
               </div>
-              <h2 className="font-bold text-base text-white">3 Kolay Adımda Kişisel Finans Asistanınızı Kurun</h2>
+              <h2 className="text-base font-bold text-white">Özel Telegram Botunuzu 60 Saniyede Bağlayın</h2>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Telegram üzerinde yalnızca size özel çalışacak, başkaları tarafından asla erişilemeyecek ve finansal verilerinizi güvenle yönetecek kişisel botunuzu 1 dakika içinde bağlayın.
+              BotFather üzerinden kendi adınıza ücretsiz bir bot oluşturun, token'ı buraya girin ve botunuz SpendLog hesabınıza mühürlensin.
             </p>
           </div>
 
-          {/* 3 Adımlı Kart Izgarası */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* 1. ADIM: BOT OLUŞTUR */}
-            <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800/90 flex flex-col justify-between space-y-4 hover:border-slate-700 transition">
-              <div className="space-y-2.5">
+            <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex flex-col justify-between space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/30">
                     1
                   </span>
-                  <span className="text-[10px] text-slate-500 font-mono">Telegram</span>
+                  <span className="text-[10px] text-indigo-400 font-mono">Telegram</span>
                 </div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                   <Bot className="w-4 h-4 text-indigo-400" />
-                  <span>Botunuzu Oluşturun</span>
+                  <span>BotFather'ı Açın</span>
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Telegram'da resmi <strong className="text-slate-200 font-mono">@BotFather</strong> botunu açın ve <code className="bg-slate-900 px-1 py-0.5 rounded text-indigo-300 font-mono">/newbot</code> komutunu gönderin. Botunuza bir isim ve kullanıcı adı belirleyin.
+                  Telegram uygulamasında <code className="bg-slate-900 px-1 py-0.5 rounded text-indigo-300 font-mono text-[11px]">@BotFather</code> ile sohbet başlatın ve <code className="bg-slate-900 px-1 py-0.5 rounded text-indigo-300 font-mono text-[11px]">/newbot</code> komutunu gönderin.
                 </p>
               </div>
 
@@ -411,19 +503,18 @@ export default function TelegramRulesPage() {
                 onClick={() => openTelegramApp('BotFather')}
                 className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <span>@BotFather'ı Aç</span>
-                <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+                <span>BotFather'ı Aç</span>
+                <ExternalLink className="w-3 h-3" />
               </button>
             </div>
 
-            {/* 2. ADIM: TOKEN AL */}
-            <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800/90 flex flex-col justify-between space-y-4 hover:border-slate-700 transition">
-              <div className="space-y-2.5">
+            <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex flex-col justify-between space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center border border-amber-500/30">
+                  <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/30">
                     2
                   </span>
-                  <span className="text-[10px] text-slate-500 font-mono">HTTP API Token</span>
+                  <span className="text-[10px] text-amber-400 font-mono">Token</span>
                 </div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                   <Key className="w-4 h-4 text-amber-400" />
@@ -436,11 +527,10 @@ export default function TelegramRulesPage() {
 
               <div className="p-2 bg-slate-900/60 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>Banka düzeyinde 256-bit izole kasa ile korunur</span>
+                <span>Banka düzeyinde izole kasa ile korunur</span>
               </div>
             </div>
 
-            {/* 3. ADIM: DOĞRULA VE BAĞLA */}
             <div className="p-5 rounded-2xl bg-slate-950/80 border border-indigo-500/30 flex flex-col justify-between space-y-4 shadow-lg shadow-indigo-950/20">
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
@@ -494,19 +584,19 @@ export default function TelegramRulesPage() {
         </div>
       )}
 
-      {/* DİNAMİK KOMUT & REGEX KURALLARI LİSTESİ */}
+      {/* SADELEŞTİRİLMİŞ DİNAMİK KOMUT & SCHEDULER KURALLARI LİSTESİ */}
       <div className="space-y-3 pt-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Terminal className="w-4 h-4 text-indigo-400" />
-            <h3 className="font-bold text-sm text-white">Tanımlı Telegram Komut ve Kuralları</h3>
+            <h3 className="font-bold text-sm text-white">Tanımlı Telegram Komut ve Zamanlanmış Görevleri</h3>
             <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono">
-              {rules.length} Kural
+              {rules.length} Görev
             </span>
           </div>
         </div>
 
-        {/* Rules Table */}
+        {/* Kurallar Tablosu (Dar Satır Yüksekliği: py-2 px-3) */}
         {isLoading ? (
           <div className="flex items-center justify-center p-12">
             <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
@@ -517,55 +607,60 @@ export default function TelegramRulesPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
-                    <th className="p-3.5">Komut / Tetikleyici</th>
-                    <th className="p-3.5">Regex Deseni</th>
-                    <th className="p-3.5">Eylem Türü</th>
-                    <th className="p-3.5">Varsayılan Hesap</th>
-                    <th className="p-3.5">Durum</th>
-                    <th className="p-3.5 text-center">İşlemler</th>
+                    <th className="py-2.5 px-3">Komut / Tetikleyici</th>
+                    <th className="py-2.5 px-3">Açıklama</th>
+                    <th className="py-2.5 px-3">Gönderim Türü</th>
+                    <th className="py-2.5 px-3">Zamanlama / Sıklık</th>
+                    <th className="py-2.5 px-3">Durum</th>
+                    <th className="py-2.5 px-3 text-center w-24">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 text-xs">
                   {rules.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-800/40 transition">
-                      <td className="p-3.5">
-                        <span className="font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-md">
+                      <td className="py-2 px-3 whitespace-nowrap">
+                        <span className="font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md text-[11px]">
                           {r.command}
                         </span>
                       </td>
-                      <td className="p-3.5 font-mono text-slate-400 max-w-xs truncate">
-                        {r.pattern}
+                      <td className="py-2 px-3 text-slate-200 font-medium max-w-sm truncate">
+                        {r.description || r.title || 'Açıklama belirtilmedi'}
                       </td>
-                      <td className="p-3.5 font-semibold text-slate-200">
-                        {ACTION_TYPE_LABELS[r.actionType]}
+                      <td className="py-2 px-3 whitespace-nowrap">
+                        {renderSendTypeBadge(r.sendType)}
                       </td>
-                      <td className="p-3.5 text-slate-400">
-                        {r.targetAccountName || 'Tüm Hesaplar / Otomatik'}
+                      <td className="py-2 px-3 whitespace-nowrap font-medium">
+                        {renderScheduleBadge(r)}
                       </td>
-                      <td className="p-3.5">
-                        <span
-                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                            r.isEnabled
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-slate-800 text-slate-500'
+                      <td className="py-2 px-3 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => toggleRuleStatus(r)}
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full transition cursor-pointer ${
+                            r.isActive
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                              : 'bg-slate-800 text-slate-500 hover:bg-slate-700'
                           }`}
+                          title="Durumu değiştirmek için tıklayın"
                         >
-                          {r.isEnabled ? 'Aktif' : 'Devre Dışı'}
-                        </span>
+                          {r.isActive ? 'Aktif' : 'Devre Dışı'}
+                        </button>
                       </td>
-                      <td className="p-3.5 text-center">
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => openEditModal(r)}
-                            className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition"
+                            className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                            title="Düzenle"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDelete(r.id, r.command)}
                             className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition cursor-pointer"
+                            title="Sil"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -578,14 +673,17 @@ export default function TelegramRulesPage() {
         )}
       </div>
 
-      {/* Rule Modal */}
+      {/* MSSQL Agent Job Scheduler Tarzı Kural Tanımlama Modalı */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-white">
-                {editingRule ? 'Kuralı Düzenle' : 'Yeni Telegram Kuralı Ekle'}
-              </h2>
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-indigo-400" />
+                <h2 className="text-base font-bold text-white">
+                  {editingRule ? 'Telegram Kuralını / Görevini Düzenle' : 'Yeni Telegram Kuralı / Görevi Tanımla'}
+                </h2>
+              </div>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
@@ -594,116 +692,221 @@ export default function TelegramRulesPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4">
+            <form onSubmit={handleSave} className="space-y-4 text-xs">
+              {/* 1. Komut / Tetikleyici */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Komut / Anahtar Kelime
+                <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Komut / Tetikleyici Anahtar Kelime *
                 </label>
                 <input
                   type="text"
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
                   required
-                  placeholder="/harca veya bakiye"
-                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Örn: /bakiye, /harca, 2026-8 veya durum"
+                  className="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
+              {/* 2. Açıklama (1.1 - Serbest Metin) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Eylem Türü
-                </label>
-                <select
-                  value={actionType}
-                  onChange={(e) => setActionType(Number(e.target.value))}
-                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value={TelegramActionType.QueryBalance}>Bakiye Sorgulama</option>
-                  <option value={TelegramActionType.AddExpense}>Harcama Ekle (Gider)</option>
-                  <option value={TelegramActionType.AddIncome}>Gelir Ekle</option>
-                  <option value={TelegramActionType.Transfer}>Hesaplar Arası Transfer</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Regex Deseni
+                <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                  Açıklama / Görev Amacı *
                 </label>
                 <input
                   type="text"
-                  value={pattern}
-                  onChange={(e) => setPattern(e.target.value)}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   required
-                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Örn: Vadesiz banka bakiyelerimi listeler / Aylık harcama grafiği üretir"
+                  className="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-3.5 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Hedef Hesap (Opsiyonel)
-                  </label>
-                  <select
-                    value={targetAccountId}
-                    onChange={(e) => setTargetAccountId(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              {/* 3. Gönderim Türü (1.3.1 - Text, Image, Pdf, ChartAndPdf) */}
+              <div>
+                <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Telegram Gönderim Türü (Send Type)
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSendType('Text')}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center gap-1.5 ${
+                      sendType === 'Text'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-white font-bold'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
                   >
-                    <option value="">Otomatik / İlk Hesap</option>
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <FileText className="w-4 h-4 text-indigo-400" />
+                    <span>Metin</span>
+                  </button>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Kategori (Opsiyonel)
-                  </label>
-                  <select
-                    value={targetCategoryId}
-                    onChange={(e) => setTargetCategoryId(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  <button
+                    type="button"
+                    onClick={() => setSendType('Image')}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center gap-1.5 ${
+                      sendType === 'Image'
+                        ? 'bg-purple-600/20 border-purple-500 text-white font-bold'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
                   >
-                    <option value="">Kategori Seçin</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    <ImageIcon className="w-4 h-4 text-purple-400" />
+                    <span>Görsel / Grafik</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSendType('Pdf')}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center gap-1.5 ${
+                      sendType === 'Pdf'
+                        ? 'bg-rose-600/20 border-rose-500 text-white font-bold'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-rose-400" />
+                    <span>Belge / PDF</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSendType('ChartAndPdf')}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center gap-1.5 ${
+                      sendType === 'ChartAndPdf'
+                        ? 'bg-emerald-600/20 border-emerald-500 text-white font-bold'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Layers className="w-4 h-4 text-emerald-400" />
+                    <span>Grafik + PDF</span>
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              {/* 4. MSSQL Job Scheduler Tarzı Zamanlama Ayarları (1.3) */}
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Zamanlama Modu (Job Scheduler)</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScheduleType('Manual')}
+                    className={`py-2 px-3 rounded-lg border text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                      scheduleType === 'Manual'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-white font-bold'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                    <span>Tetikleyici / Komutla</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setScheduleType('Recurring')}
+                    className={`py-2 px-3 rounded-lg border text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                      scheduleType === 'Recurring'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-white font-bold'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Repeat className="w-3.5 h-3.5" />
+                    <span>Zamanlanmış (Recurring)</span>
+                  </button>
+                </div>
+
+                {scheduleType === 'Recurring' && (
+                  <div className="pt-2 border-t border-slate-800/70 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-400 mb-1">Sıklık (Frequency)</label>
+                        <select
+                          value={frequency}
+                          onChange={(e) => setFrequency(e.target.value as TelegramFrequency)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                        >
+                          <option value="Daily">Günlük (Daily)</option>
+                          <option value="Weekly">Haftalık (Weekly)</option>
+                          <option value="Interval">Belirli Aralıklarla (Interval)</option>
+                        </select>
+                      </div>
+
+                      {frequency === 'Interval' ? (
+                        <div>
+                          <label className="block text-slate-400 mb-1">Aralık (Dakika)</label>
+                          <select
+                            value={intervalMinutes}
+                            onChange={(e) => setIntervalMinutes(Number(e.target.value))}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono"
+                          >
+                            <option value={15}>15 Dakikada Bir</option>
+                            <option value={30}>30 Dakikada Bir</option>
+                            <option value={60}>1 Saatte Bir</option>
+                            <option value={120}>2 Saatte Bir</option>
+                            <option value={240}>4 Saatte Bir</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-slate-400 mb-1">Çalışma Saati (HH:mm)</label>
+                          <input
+                            type="time"
+                            value={executionTime}
+                            onChange={(e) => setExecutionTime(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white font-mono"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* MSSQL SSMS Tarzı Dinamik Özet Kutusu */}
+                    <div className="p-2.5 rounded-lg bg-indigo-950/30 border border-indigo-500/20 text-[11px] text-indigo-300 flex items-start gap-2">
+                      <Calendar className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-white block">Zamanlama Özeti:</span>
+                        <p className="text-slate-300 mt-0.5">
+                          {getScheduleSummary(scheduleType, frequency, executionTime, intervalMinutes)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Aktiflik Durumu */}
+              <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
-                  id="isEnabled"
-                  checked={isEnabled}
-                  onChange={(e) => setIsEnabled(e.target.checked)}
-                  className="w-4 h-4 rounded text-indigo-600 bg-slate-950 border-slate-800 focus:ring-indigo-500"
+                  id="isActive"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="w-4 h-4 rounded text-indigo-600 bg-slate-950 border-slate-800 focus:ring-indigo-500 cursor-pointer"
                 />
-                <label htmlFor="isEnabled" className="text-xs font-semibold text-slate-300 cursor-pointer">
-                  Kural Aktif Olsun
+                <label htmlFor="isActive" className="font-semibold text-slate-300 cursor-pointer">
+                  Kural / Görev Aktif Olsun
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl font-semibold text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 transition cursor-pointer"
                 >
                   İptal
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-lg shadow-indigo-500/20 transition disabled:opacity-50 cursor-pointer"
+                  className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold px-4 py-2 rounded-xl shadow-lg shadow-indigo-500/20 transition disabled:opacity-50 cursor-pointer"
                 >
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  <span>{editingRule ? 'Güncelle' : 'Kaydet'}</span>
+                  <span>{editingRule ? 'Güncelle' : 'Görevi Kaydet'}</span>
                 </button>
               </div>
             </form>
@@ -711,7 +914,7 @@ export default function TelegramRulesPage() {
         </div>
       )}
 
-      {/* Global Özel Profesyonel Onay Modalı */}
+      {/* Global Onay Modalı */}
       <ConfirmModal
         isOpen={confirmModalState.isOpen}
         title={confirmModalState.title}

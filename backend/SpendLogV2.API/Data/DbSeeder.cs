@@ -96,10 +96,12 @@ public static class DbSeeder
                 {
                     Command = "bakiye",
                     Title = "Bakiye Sorgulama",
-                    Description = "Tüm hesapların güncel bakiyelerini listeler.",
+                    Description = "Vadesiz banka hesaplarının güncel bakiyelerini ve toplamını listeler.",
                     Pattern = "^/bakiye$",
                     ActionType = "GetBalance",
-                    ResponseTemplate = "💰 *Hesap Bakiyeleriniz:*\n{hesap_listesi}\n*Toplam Varlık:* {toplam_varlik} ₺",
+                    ResponseTemplate = "💳 *SPENDLOG VADESİZ BANKA HESAP BAKİYELERİNİZ*\n{hesap_listesi}\n💰 *Toplam Vadesiz Banka Bakiyesi:* {toplam_varlik} ₺",
+                    SendType = "Text",
+                    ScheduleType = "Manual",
                     UserId = adminUser.Id
                 },
                 new()
@@ -110,6 +112,8 @@ public static class DbSeeder
                     Pattern = @"^/harcama\s+(\d+(?:[.,]\d+)?)\s+(\S+)(?:\s+(.*))?$",
                     ActionType = "CreateTransaction",
                     ResponseTemplate = "✅ *Harcama Kaydedildi!*\nTutar: {tutar} ₺\nKategori: {kategori}\nAçıklama: {aciklama}\nHesap: {hesap}",
+                    SendType = "Text",
+                    ScheduleType = "Manual",
                     UserId = adminUser.Id
                 },
                 new()
@@ -120,6 +124,8 @@ public static class DbSeeder
                     Pattern = @"^/(kk|kart)\s+(\d+(?:[.,]\d+)?)(?:\s+(.*))?$",
                     ActionType = "CreateCreditCardExpense",
                     ResponseTemplate = "💳 *Kredi Kartı Harcaması İşlendi!*\nTutar: -{tutar} ₺\nNot: {not}\nDönem: {donem}",
+                    SendType = "Text",
+                    ScheduleType = "Manual",
                     UserId = adminUser.Id
                 },
                 new()
@@ -130,6 +136,20 @@ public static class DbSeeder
                     Pattern = "^/(durum|ping|health|sistem)$",
                     ActionType = "GetSystemStatus",
                     ResponseTemplate = "🖥️ *SpendLog V2 Sistem Durumu:*\nUptime: {uptime}\nDB Ping: {ping} ms",
+                    SendType = "Text",
+                    ScheduleType = "Manual",
+                    UserId = adminUser.Id
+                },
+                new()
+                {
+                    Command = "rapor",
+                    Title = "Aylık Harcama Grafiği & PDF Dökümü",
+                    Description = "Belirtilen ayın (Örn: 2026-8 veya /rapor 2026-8) kategori harcama grafiğini (PNG) ve detaylı PDF dökümünü üretir.",
+                    Pattern = @"^(?:/rapor\s+)?(\d{4}-(?:1[0-2]|0[1-9]|[1-9]))$",
+                    ActionType = "MonthlyReport",
+                    ResponseTemplate = "📊 Aylık harcama dağılım grafiği ve PDF dökümü hazırlanıyor...",
+                    SendType = "ChartAndPdf",
+                    ScheduleType = "Manual",
                     UserId = adminUser.Id
                 }
             };
