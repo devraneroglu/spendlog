@@ -107,7 +107,17 @@ public class TelegramAlertService : ITelegramAlertService
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning("Telegram alarmı kullanıcıya ({UserId}) iletilemedi: {Message}", user.Id, ex.Message);
+                        _logger.LogWarning("Markdown ile alarm iletilemedi ({UserId}), düz metin deneniyor: {Message}", user.Id, ex.Message);
+                        try
+                        {
+                            await _botClient.SendMessage(
+                                chatId: user.TelegramChatId.Value,
+                                text: text);
+                        }
+                        catch (Exception innerEx)
+                        {
+                            _logger.LogWarning("Telegram alarmı kullanıcıya ({UserId}) iletilemedi: {Message}", user.Id, innerEx.Message);
+                        }
                     }
                 }
             }

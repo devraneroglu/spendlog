@@ -58,7 +58,26 @@ public class TelegramBotService : BackgroundService
 
             _logger.LogInformation("🚀 Telegram Bot Başarıyla Başlatıldı.");
 
-            // Bot başladığında aktif kullanıcılara açılış bildirimi gönder
+            // Bot menü komutlarını Telegram istemcisine kaydet
+            try
+            {
+                var botCommands = new[]
+                {
+                    new BotCommand { Command = "bakiye", Description = "Hesap bakiyeleri ve toplam likit varlık" },
+                    new BotCommand { Command = "yakit", Description = "Akaryakıt tüketim kaydı" },
+                    new BotCommand { Command = "kk", Description = "Kredi kartı harcama girişi" },
+                    new BotCommand { Command = "durum", Description = "Sistem sağlık ve uptime raporu" },
+                    new BotCommand { Command = "temizle", Description = "Sohbet geçmişini temizle" },
+                    new BotCommand { Command = "help", Description = "Komut yardım ve rehberi" }
+                };
+                await _botClient.SetMyCommands(botCommands, cancellationToken: stoppingToken);
+            }
+            catch (Exception cmdEx)
+            {
+                _logger.LogWarning(cmdEx, "Telegram bot komut menüsü kaydedilemedi.");
+            }
+
+            // Bot başladığında aktif kullanıcılara açılış bildirimi gönder (yapılandırılabilir)
             _ = Task.Run(async () =>
             {
                 await Task.Delay(2000, stoppingToken);
@@ -90,6 +109,9 @@ public class TelegramBotService : BackgroundService
     {
         try
         {
+            if (!_configuration.GetValue<bool>("Telegram:SendStartupNotification", true))
+                return;
+
             using var scope = _serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<SpendLogDbContext>();
 
@@ -97,11 +119,7 @@ public class TelegramBotService : BackgroundService
                 .Where(u => u.TelegramChatId != null && u.IsTelegramActive)
                 .ToListAsync(cancellationToken);
 
-            var startupMsg = $"🟢 *SPENDLOG V2 SERVİSİ BAŞLATILDI*\n\n" +
-                             $"• *Durum:* Sistem Aktif ve Komutları Dinliyor\n" +
-                             $"• *Sürüm:* `v2.0 (.NET 10)`\n" +
-                             $"• *Başlangıç:* `{DateTime.Now:dd.MM.yyyy HH:mm:ss}`\n\n" +
-                             $"💡 _Bakiye için `/bakiye`, yakıt için `/yakit`, kredi kartı için `/kk`, sistem kontrolü için `/durum` yazabilirsiniz._";
+            var startupMsg = $"🟢 *SpendLog API aktif* (`v2.0` • `{DateTime.Now:HH:mm}`)";
 
             foreach (var user in activeUsers)
             {
@@ -113,6 +131,7 @@ public class TelegramBotService : BackgroundService
                             chatId: user.TelegramChatId.Value,
                             text: startupMsg,
                             parseMode: ParseMode.Markdown,
+                            disableNotification: true,
                             cancellationToken: cancellationToken);
                     }
                     catch (Exception ex)
@@ -132,6 +151,9 @@ public class TelegramBotService : BackgroundService
     {
         try
         {
+            if (!_configuration.GetValue<bool>("Telegram:SendStartupNotification", true))
+                return;
+
             using var scope = _serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<SpendLogDbContext>();
 
@@ -139,10 +161,7 @@ public class TelegramBotService : BackgroundService
                 .Where(u => u.TelegramChatId != null && u.IsTelegramActive)
                 .ToListAsync(cancellationToken);
 
-            var shutdownMsg = $"🟡 *SPENDLOG V2 SERVİSİ BAKIM MODUNDA*\n\n" +
-                              $"• *Durum:* Servis Güncelleme / Yeniden Başlatma\n" +
-                              $"• *Kapanış Zamanı:* `{DateTime.Now:dd.MM.yyyy HH:mm:ss}`\n\n" +
-                              $"ℹ️ _Servis tekrar ayağa kalktığında otomatik bildirim alacaksınız._";
+            var shutdownMsg = $"🟡 *SpendLog API bakım modunda* (`{DateTime.Now:HH:mm}`)";
 
             foreach (var user in activeUsers)
             {
@@ -154,6 +173,7 @@ public class TelegramBotService : BackgroundService
                             chatId: user.TelegramChatId.Value,
                             text: shutdownMsg,
                             parseMode: ParseMode.Markdown,
+                            disableNotification: true,
                             cancellationToken: cancellationToken);
                     }
                     catch { /* Shutdown esnasında hata fırlatma */ }

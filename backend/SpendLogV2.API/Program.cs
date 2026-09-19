@@ -96,8 +96,29 @@ using (var scope = app.Services.CreateScope())
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "Veritabanı migration veya seed işlemi sırasında hata oluştu.");
+        try
+        {
+            var alertService = services.GetService<SpendLogV2.Application.Common.Interfaces.ITelegramAlertService>();
+            alertService?.SendCriticalAlertAsync("API Startup / Database Migration", ex.Message, exception: ex).GetAwaiter().GetResult();
+        }
+        catch { }
     }
 }
+
+// Global Unhandled Process Exception Alert
+AppDomain.CurrentDomain.UnhandledException += (sender, eventArgs) =>
+{
+    if (eventArgs.ExceptionObject is Exception unhandledEx)
+    {
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var alertService = scope.ServiceProvider.GetService<SpendLogV2.Application.Common.Interfaces.ITelegramAlertService>();
+            alertService?.SendCriticalAlertAsync("API Unhandled Process Crash", unhandledEx.Message, exception: unhandledEx).GetAwaiter().GetResult();
+        }
+        catch { }
+    }
+};
 
 // 5. Middleware Pipeline
 app.UseMiddleware<SpendLogV2.API.Middlewares.GlobalExceptionMiddleware>();

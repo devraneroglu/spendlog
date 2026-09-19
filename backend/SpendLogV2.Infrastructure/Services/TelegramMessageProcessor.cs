@@ -15,6 +15,7 @@ public class TelegramMessageProcessor : ITelegramMessageProcessor
     private readonly SpendLogDbContext _context;
     private readonly ILogger<TelegramMessageProcessor> _logger;
     private static readonly DateTime _startTime = DateTime.UtcNow;
+    private const string StandardHelpMessage = "💡 Bakiye için `/bakiye`, yakıt için `/yakit`, kredi kartı için `/kk`, sistem kontrolü için `/durum` yazabilirsiniz.";
 
     public TelegramMessageProcessor(SpendLogDbContext context, ILogger<TelegramMessageProcessor> logger)
     {
@@ -100,6 +101,69 @@ public class TelegramMessageProcessor : ITelegramMessageProcessor
                                $"🔄 _İşlemi gerçekleştirmek için lütfen komutunuzu tekrar yazınız._";
 
             await botClient.SendMessage(chatId: message.Chat.Id, text: staleWarning, parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
+            return;
+        }
+
+        // 0.0. /help, help, /yardim, yardim Komutları
+        if (text.Equals("/help", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("help", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("/yardim", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("/yardım", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("yardim", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("yardım", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("komutlar", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("/komutlar", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("bilgi", StringComparison.OrdinalIgnoreCase))
+        {
+            await botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: StandardHelpMessage,
+                parseMode: ParseMode.Markdown,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        // 0.0.1. /temizle, /clear, clear-all Komutları (Son 80 mesajı temizleme)
+        if (text.Equals("/temizle", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("temizle", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("/clear", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("clear", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("/clearall", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("clear-all", StringComparison.OrdinalIgnoreCase) ||
+            text.Equals("clearall", StringComparison.OrdinalIgnoreCase))
+        {
+            var currentMsgId = message.MessageId;
+            var targetCount = 80;
+
+            for (int msgId = currentMsgId; msgId >= Math.Max(1, currentMsgId - targetCount); msgId--)
+            {
+                try
+                {
+                    await botClient.DeleteMessage(chatId: message.Chat.Id, messageId: msgId, cancellationToken: cancellationToken);
+                }
+                catch
+                {
+                    // 48 saati aşmış veya zaten silinmiş mesajları sessizce atla
+                }
+            }
+
+            var feedbackMsg = await botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "🧹 _Sohbet geçmişi temizlendi._",
+                parseMode: ParseMode.Markdown,
+                cancellationToken: cancellationToken);
+
+            // 3 saniye sonra bildirim mesajını da kaldırarak sohbeti tertemiz bırak
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                try
+                {
+                    await botClient.DeleteMessage(chatId: message.Chat.Id, messageId: feedbackMsg.MessageId);
+                }
+                catch { }
+            });
+
             return;
         }
 
@@ -572,10 +636,11 @@ public class TelegramMessageProcessor : ITelegramMessageProcessor
             }
         }
 
-        // Tanımlanamayan komut
+        // Tanımlanamayan komut / genel yardım rehberi
         await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text: "❓ Komut anlaşılamadı.\n\n• Bakiye sorgulamak için `/bakiye`\n• Kredi kartı harcaması için `/kk 500 yemek`\n• Yakıt eklemek için fiş fotoğrafı atabilir veya `/yakit 500 26.3 30099 Opet` yazabilirsiniz.",
+            text: StandardHelpMessage,
+            parseMode: ParseMode.Markdown,
             cancellationToken: cancellationToken);
     }
 }
