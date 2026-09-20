@@ -6,14 +6,20 @@ cls
 echo ================================================================
 echo          SPENDLOG V2 - FULL STACK SERVICE STARTER
 echo ================================================================
-echo.
+:: Ensure SQL Server service is active
+sc query MSSQLSERVER | find "RUNNING" >nul
+if %ERRORLEVEL% neq 0 (
+    echo [0/3] SQL Server servisi baslatiliyor...
+    net start MSSQLSERVER >nul 2>&1
+)
+
 echo [1/3] Starting Backend API (.NET 10 - Port: 5007)...
-start "SpendLog API (5007)" cmd /k "cd /d ""%~dp0backend\SpendLogV2.API"" && dotnet run --urls http://localhost:5007"
+start "SpendLog API (5007)" cmd /k "cd /d ""%~dp0backend\SpendLogV2.API"" && set ASPNETCORE_ENVIRONMENT=Development && dotnet run --urls http://localhost:5007"
 
 ping 127.0.0.1 -n 3 >nul
 
 echo [2/3] Starting Scraper Service (FastAPI - Port: 8000)...
-start "SpendLog Scraper (8000)" cmd /k "cd /d ""%~dp0scraper-service"" && if exist .\venv\Scripts\activate (call .\venv\Scripts\activate) && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+start "SpendLog Scraper (8000)" cmd /k "cd /d ""%~dp0scraper-service"" && if exist .\venv\Scripts\activate (call .\venv\Scripts\activate) && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
 ping 127.0.0.1 -n 3 >nul
 

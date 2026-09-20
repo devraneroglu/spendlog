@@ -75,33 +75,45 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// 4. Auto Migration & Database Seeding
+// 4. Auto Migration & Database Seeding with Resilience Retry Loop
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    try
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    const int maxRetries = 5;
+    for (int retry = 1; retry <= maxRetries; retry++)
     {
-        var dbContext = services.GetRequiredService<SpendLogDbContext>();
-        await dbContext.Database.MigrateAsync();
-
-        var userManager = services.GetRequiredService<UserManager<AppUser>>();
-        var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
-        var config = services.GetRequiredService<IConfiguration>();
-        await DbSeeder.SeedAsync(dbContext, userManager, roleManager, config);
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "Veritabanı migration veya seed işlemi sırasında hata oluştu.");
         try
         {
-            var alertService = services.GetService<SpendLogV2.Application.Common.Interfaces.ITelegramAlertService>();
-            alertService?.SendCriticalAlertAsync("API Startup / Database Migration", ex.Message, exception: ex).GetAwaiter().GetResult();
+            var dbContext = services.GetRequiredService<SpendLogDbContext>();
+            await dbContext.Database.MigrateAsync();
+
+            var userManager = services.GetRequiredService<UserManager<AppUser>>();
+            var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+            var config = services.GetRequiredService<IConfiguration>();
+            await DbSeeder.SeedAsync(dbContext, userManager, roleManager, config);
+            logger.LogInformation("✅ Veritabanı migration ve seed işlemi başarıyla tamamlandı.");
+            break;
         }
-        catch { }
+        catch (Exception ex) when (retry < maxRetries)
+        {
+            logger.LogWarning("⚠️ SQL Server bağlantısı henüz hazır değil (Deneme {Retry}/{Max}). 2 saniye sonra tekrar deneniyor... Hata: {Message}", retry, maxRetries, ex.Message);
+            await Task.Delay(2000);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "❌ Veritabanı migration veya seed işlemi sırasında kritik hata oluştu.");
+            try
+            {
+                var alertService = services.GetService<SpendLogV2.Application.Common.Interfaces.ITelegramAlertService>();
+                alertService?.SendCriticalAlertAsync("API Startup / Database Migration", ex.Message, exception: ex).GetAwaiter().GetResult();
+            }
+            catch { }
+        }
     }
 }
 
