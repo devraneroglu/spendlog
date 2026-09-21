@@ -15,10 +15,12 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "title": "BIST Hisse Fiyatları Kazıyıcı",
         "desc": "Borsa İstanbul canlı hisse fiyatlarını ve günlük değişim yüzdelerini periyodik kazır.",
         "category": "stocks",
-        "sourceName": "BigPara & Yahoo Finance",
+        "sourceName": "BigPara Canlı Borsa",
         "defaultUrl": "https://bigpara.hurriyet.com.tr/borsa/canli-borsa/",
+        "backupSourceName": "TradingView BIST Scanner API",
+        "backupUrl": "https://scanner.tradingview.com/turkey/scan",
         "defaultCron": "*/2 * * * *",
-        "tags": ["BIST 100", "Hisse", "BigPara"],
+        "tags": ["BIST 100", "Hisse", "BigPara", "TradingView"],
     },
     "US_STOCKS": {
         "title": "ABD Wall Street Hisseleri Kazıyıcı",
@@ -26,6 +28,8 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "category": "stocks",
         "sourceName": "Yahoo Finance API",
         "defaultUrl": "https://finance.yahoo.com/lookup",
+        "backupSourceName": "CNBC Global Quotes",
+        "backupUrl": "https://quote.cnbc.com/quote-html-web/quote.htm",
         "defaultCron": "*/2 * * * *",
         "tags": ["S&P 500", "NASDAQ", "Wall Street"],
     },
@@ -35,6 +39,8 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "category": "commodities",
         "sourceName": "BigPara Canlı Altın",
         "defaultUrl": "https://bigpara.hurriyet.com.tr/altin/",
+        "backupSourceName": "Serbest Piyasa Döviz & Altın API",
+        "backupUrl": "https://finans.truncgil.com/v4/today.json",
         "defaultCron": "*/2 * * * *",
         "tags": ["Gram Altın", "Gümüş", "BigPara"],
     },
@@ -44,6 +50,8 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "category": "commodities",
         "sourceName": "Yahoo Finance (BZ=F, CL=F, ^VIX)",
         "defaultUrl": "https://finance.yahoo.com/commodities",
+        "backupSourceName": "CNBC Realtime Commodities",
+        "backupUrl": "https://quote.cnbc.com/quote-html-web/quote.htm",
         "defaultCron": "*/2 * * * *",
         "tags": ["Brent", "WTI", "VIX", "Emtia"],
     },
@@ -53,6 +61,8 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "category": "crypto",
         "sourceName": "CoinGecko Global API",
         "defaultUrl": "https://api.coingecko.com/api/v3/simple/price",
+        "backupSourceName": "Binance Public Spot API",
+        "backupUrl": "https://api.binance.com/api/v3/ticker/price",
         "defaultCron": "*/1 * * * *",
         "tags": ["Bitcoin", "Ethereum", "CoinGecko"],
     },
@@ -60,8 +70,10 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "title": "Kripto Barometresi & Sentiment",
         "desc": "Kripto Korku ve Hırs Endeksi, Altcoin Sezon Puanı ve BTC Dominansını tek hatta toplar.",
         "category": "crypto",
-        "sourceName": "Alternative.me & Blockchaincenter",
+        "sourceName": "Alternative.me",
         "defaultUrl": "https://api.alternative.me/fng/",
+        "backupSourceName": "CoinStats Sentiment API",
+        "backupUrl": "https://api.coin-stats.com/v2/fear-greed",
         "defaultCron": "*/15 * * * *",
         "tags": ["Korku & Hırs", "Altcoin Sezonu", "BTC.D"],
     },
@@ -69,8 +81,10 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "title": "Döviz Kurları & Dolar Endeksi (DXY)",
         "desc": "TCMB ve serbest piyasa USD/TRY, EUR/TRY ve Dolar Endeksi (DXY) canlı kurlarını çeker.",
         "category": "macro",
-        "sourceName": "TCMB & Serbest Piyasa & Yahoo",
+        "sourceName": "TCMB Gösterge Kurları",
         "defaultUrl": "https://www.tcmb.gov.tr/kurlar/today.xml",
+        "backupSourceName": "BigPara Serbest Piyasa Döviz",
+        "backupUrl": "https://bigpara.hurriyet.com.tr/doviz/",
         "defaultCron": "*/5 * * * *",
         "tags": ["Dolar", "Euro", "DXY", "TCMB"],
     },
@@ -78,8 +92,10 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "title": "ABD Tahvil Faizleri (US10Y & US2Y)",
         "desc": "Küresel risk iştahı ve FED faiz beklentilerini yansıtan ABD 10Y ve 2Y tahvil getirilerini çeker.",
         "category": "macro",
-        "sourceName": "Yahoo Finance (^TNX, 2YY=F)",
-        "defaultUrl": "https://finance.yahoo.com/bonds",
+        "sourceName": "CNBC & Yahoo Finance (^TNX)",
+        "defaultUrl": "https://quote.cnbc.com/quote-html-web/quote.htm",
+        "backupSourceName": "Yahoo Finance Bonds",
+        "backupUrl": "https://finance.yahoo.com/bonds",
         "defaultCron": "*/5 * * * *",
         "tags": ["US10Y", "US2Y", "Tahvil", "FED"],
     },
@@ -87,8 +103,10 @@ JOB_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "title": "Dünya Merkez Bankaları Faiz Oranları",
         "desc": "TCMB, FED ve ECB geçerli politika faizlerini, sonraki toplantı tarihlerini ve son değişimleri çeker.",
         "category": "macro",
-        "sourceName": "Investing.com Central Banks",
+        "sourceName": "TCMB & Investing.com",
         "defaultUrl": "https://www.investing.com/central-banks/",
+        "backupSourceName": "Global Rates API",
+        "backupUrl": "https://www.global-rates.com/en/interest-rates/central-banks/",
         "defaultCron": "0 */1 * * *",
         "tags": ["TCMB", "FED", "ECB", "Faiz"],
     },
@@ -161,6 +179,9 @@ class DynamicSchedulerService:
                 "category": defn.get("category", "macro"),
                 "source_name": defn.get("sourceName", "Web Kaynağı"),
                 "target_url": current_status.get("target_url") or defn.get("defaultUrl", ""),
+                "backup_source_name": defn.get("backupSourceName", "Yedek Kaynak"),
+                "backup_url": current_status.get("backup_url") or defn.get("backupUrl", ""),
+                "active_source": current_status.get("active_source", "primary"),
                 "tags": defn.get("tags", []),
                 "cron_expression": cron_expr,
                 "is_enabled": current_status.get("is_enabled", True),
@@ -211,7 +232,14 @@ class DynamicSchedulerService:
     def update_target_url(self, job_key: str, target_url: str) -> bool:
         if job_key in self.job_statuses:
             self.job_statuses[job_key]["target_url"] = target_url.strip()
-            scraper_logger.info(f"🔗 {job_key} hedef URL güncellendi: {target_url}")
+            scraper_logger.info(f"🔗 {job_key} birincil hedef URL güncellendi: {target_url}")
+            return True
+        return False
+
+    def update_backup_url(self, job_key: str, backup_url: str) -> bool:
+        if job_key in self.job_statuses:
+            self.job_statuses[job_key]["backup_url"] = backup_url.strip()
+            scraper_logger.info(f"🛡️ {job_key} yedek hedef URL güncellendi: {backup_url}")
             return True
         return False
 
@@ -276,32 +304,50 @@ class DynamicSchedulerService:
                 "THYAO", "GARAN", "AKBNK", "ASELS", "SISE", "EREGL", "TUPRS", "KCHOL",
                 "ENJSA", "ISMEN", "TRGYO", "ENKAI", "ISCTR", "BIMAS", "SAHOL", "TCELL"
             ]
-            stock_tasks = [self.scrapers.get_stock_data(sym) for sym in symbols]
-            xu_task = self.scrapers.get_stock_data("XU100")
             sector_symbols = ["XBANK", "XHOLD", "XUSIN", "XULAS", "XGMYO"]
-            sector_tasks = [self.scrapers.get_stock_data(s) for s in sector_symbols]
-
-            stock_res, xu, sector_res = await asyncio.gather(
-                asyncio.gather(*stock_tasks, return_exceptions=True),
-                xu_task,
-                asyncio.gather(*sector_tasks, return_exceptions=True),
-                return_exceptions=True
-            )
+            all_symbols = symbols + ["XU100"] + sector_symbols
 
             results = {}
-            if isinstance(stock_res, (list, tuple)):
-                for sym, res in zip(symbols, stock_res):
-                    if isinstance(res, dict) and res.get("price") is not None:
-                        results[sym] = res
+            active_src = "primary"
 
-            if isinstance(xu, dict) and xu.get("price") is not None:
-                results["XU100"] = xu
+            # 1. Hat: Hızlı TradingView Scanner (veya Birincil URL)
+            try:
+                tv_res = await self.scrapers.get_tradingview_stocks(all_symbols)
+                if tv_res and len(tv_res) >= 5:
+                    results = tv_res
+                    active_src = "primary"
+                else:
+                    raise Exception("TradingView BIST insufficient data")
+            except Exception as e:
+                scraper_logger.warning(f"BIST Primary source failed: {e}. Switching to backup...")
+                active_src = "backup"
+                # 2. Hat (Yedek): Yahoo Direct Chart with .IS per symbol
+                stock_tasks = [self.scrapers.get_stock_data(sym) for sym in symbols]
+                xu_task = self.scrapers.get_stock_data("XU100")
+                sector_tasks = [self.scrapers.get_stock_data(s) for s in sector_symbols]
 
-            sectors_dict = {}
-            if isinstance(sector_res, (list, tuple)):
-                for s, r in zip(sector_symbols, sector_res):
-                    if isinstance(r, dict) and r.get("price") is not None:
-                        sectors_dict[s] = r
+                stock_res, xu, sector_res = await asyncio.gather(
+                    asyncio.gather(*stock_tasks, return_exceptions=True),
+                    xu_task,
+                    asyncio.gather(*sector_tasks, return_exceptions=True),
+                    return_exceptions=True
+                )
+
+                if isinstance(stock_res, (list, tuple)):
+                    for sym, res in zip(symbols, stock_res):
+                        if isinstance(res, dict) and res.get("price") is not None:
+                            results[sym] = res
+                if isinstance(xu, dict) and xu.get("price") is not None:
+                    results["XU100"] = xu
+                if isinstance(sector_res, (list, tuple)):
+                    for s, r in zip(sector_symbols, sector_res):
+                        if isinstance(r, dict) and r.get("price") is not None:
+                            results[s] = r
+
+            if "BIST_STOCKS" in self.job_statuses:
+                self.job_statuses["BIST_STOCKS"]["active_source"] = active_src
+
+            sectors_dict = {s: results[s] for s in sector_symbols if s in results}
 
             self.latest_prices["bist"] = results
             market_cache.update_market_category("bist", list(results.values()))
@@ -314,8 +360,8 @@ class DynamicSchedulerService:
             market_cache.update_market_category("indices", indices)
 
             latency = round((time.time() - start_t) * 1000)
-            xu_p = xu.get("price", 14000) if isinstance(xu, dict) else 14000
-            sample = f"BIST 100: {xu_p} | {len(results)} sembol güncel"
+            xu_p = results.get("XU100", {}).get("price", 14000)
+            sample = f"BIST 100: {xu_p} | {len(results)} sembol güncel ({active_src})"
             self._update_status("BIST_STOCKS", "Success", latency_ms=latency, summary=sample)
         except Exception as e:
             latency = round((time.time() - start_t) * 1000)

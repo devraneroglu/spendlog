@@ -75,20 +75,50 @@ public class PriceAlertEvaluator
 
                         if (user != null && user.TelegramChatId.HasValue)
                         {
+                            // DB'den EVENT_PRICE_ALERT kuralını oku (Koda bir şey gömülmesin kuralı)
+                            var rule = await dbCtx.Set<TelegramRule>()
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(r => r.UserId == user.Id && r.Command == "EVENT_PRICE_ALERT", cancellationToken);
+
+                            // Kural tanımlı ve pasif ise bildirim gönderilmez
+                            if (rule != null && !rule.IsActive)
+                            {
+                                _logger.LogInformation("Fiyat alarmı tetiklendi ancak EVENT_PRICE_ALERT kuralı kullanıcı tarafından devre dışı bırakıldığı için Telegram bildirimi gönderilmedi. Symbol: {Symbol}", alert.Symbol);
+                                continue;
+                            }
+
                             var currencySymbol = alert.Currency == Currency.USD ? "$" : alert.Currency == Currency.EUR ? "€" : "₺";
                             var conditionSymbol = alert.Condition == PriceAlertCondition.AboveOrEqual ? "▲ Hedefe Ulaştı (≥)" : "▼ Hedefin Altına Düştü (≤)";
+                            var noteText = !string.IsNullOrWhiteSpace(alert.Note) ? alert.Note : "-";
+                            var timeText = DateTime.Now.ToString("dd.MM.yyyy HH:mm");
 
-                            var msg = $"🚨 *SPENDLOG FİYAT ALARMI TETİKLENDİ!*\n\n" +
+                            string msg;
+                            if (rule != null && !string.IsNullOrWhiteSpace(rule.ResponseTemplate))
+                            {
+                                msg = rule.ResponseTemplate
+                                    .Replace("{Symbol}", alert.Symbol, StringComparison.OrdinalIgnoreCase)
+                                    .Replace("{Name}", alert.Name ?? alert.Symbol, StringComparison.OrdinalIgnoreCase)
+                                    .Replace("{TargetPrice}", alert.TargetPrice.ToString("N2"), StringComparison.OrdinalIgnoreCase)
+                                    .Replace("{CurrentPrice}", currentPrice.ToString("N2"), StringComparison.OrdinalIgnoreCase)
+                                    .Replace("{Currency}", currencySymbol, StringComparison.OrdinalIgnoreCase)
+                                    .Replace("{Condition}", conditionSymbol, StringComparison.OrdinalIgnoreCase)
+                                    .Replace("{Note}", noteText, StringComparison.OrdinalIgnoreCase)
+                                    .Replace("{Time}", timeText, StringComparison.OrdinalIgnoreCase);
+                            }
+                            else
+                            {
+                                msg = $"🚨 *SPENDLOG FİYAT ALARMI TETİKLENDİ!*\n\n" +
                                       $"🪙 *Varlık:* `{alert.Symbol}` ({alert.Name})\n" +
                                       $"🎯 *Hedef:* `{alert.TargetPrice:N2} {currencySymbol}` ({conditionSymbol})\n" +
                                       $"📈 *Anlık Fiyat:* `{currentPrice:N2} {currencySymbol}`\n";
 
-                            if (!string.IsNullOrWhiteSpace(alert.Note))
-                            {
-                                msg += $"📝 *Not:* _{alert.Note}_\n";
-                            }
+                                if (!string.IsNullOrWhiteSpace(alert.Note))
+                                {
+                                    msg += $"📝 *Not:* _{alert.Note}_\n";
+                                }
 
-                            msg += $"⏰ *Zaman:* {DateTime.Now:dd.MM.yyyy HH:mm}";
+                                msg += $"⏰ *Zaman:* {timeText}";
+                            }
 
                             await _telegramService.SendMessageAsync(user.TelegramChatId.Value, msg, cancellationToken);
                             _logger.LogInformation("Fiyat alarmı tetiklendi ve Telegram bildirimi gönderildi. Symbol: {Symbol}, Price: {Price}", alert.Symbol, currentPrice);

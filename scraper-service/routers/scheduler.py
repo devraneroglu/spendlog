@@ -50,6 +50,13 @@ def get_scheduler_router(scheduler_service):
             raise HTTPException(status_code=400, detail="Hedef URL güncellenemedi.")
         return {"success": True, "message": f"{req.job_key} kaynak URL adresi güncellendi."}
 
+    @router.post("/update-backup-url")
+    async def update_backup_url(req: UrlUpdateRequest):
+        success = scheduler_service.update_backup_url(req.job_key, req.target_url)
+        if not success:
+            raise HTTPException(status_code=400, detail="Yedek URL güncellenemedi.")
+        return {"success": True, "message": f"{req.job_key} yedek kaynak URL adresi güncellendi."}
+
     @router.post("/trigger-now")
     async def trigger_now(req: TriggerJobRequest):
         success = await scheduler_service.trigger_job_now(req.job_key)

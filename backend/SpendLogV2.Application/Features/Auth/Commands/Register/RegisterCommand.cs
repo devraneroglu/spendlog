@@ -116,6 +116,31 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, AuthRespo
                     ActionType = "GetSystemStatus",
                     ResponseTemplate = "🖥️ *SpendLog V2 Sistem Durumu:*\nUptime: {uptime}\nDB Ping: {ping} ms",
                     UserId = user.Id
+                },
+                new()
+                {
+                    Command = "rapor",
+                    Title = "Aylık Harcama Grafiği & PDF Dökümü",
+                    Description = "Belirtilen ayın (Örn: 2026-8 veya /rapor 2026-8) kategori harcama grafiğini (PNG) ve detaylı PDF dökümünü üretir.",
+                    Pattern = @"^(?:/rapor\s+)?(\d{4}-(?:1[0-2]|0[1-9]|[1-9]))$",
+                    ActionType = "MonthlyReport",
+                    ResponseTemplate = "📊 Aylık harcama dağılım grafiği ve PDF dökümü hazırlanıyor...",
+                    SendType = "ChartAndPdf",
+                    ScheduleType = "Manual",
+                    UserId = user.Id
+                },
+                new()
+                {
+                    Command = "EVENT_PRICE_ALERT",
+                    Title = "Fiyat Alarmı Bildirimi",
+                    Description = "Varlık hedef fiyata ulaştığında veya altına düştüğünde iletilen dinamik Telegram alarm şablonu.",
+                    Pattern = "EVENT_PRICE_ALERT",
+                    ActionType = "PriceAlert",
+                    ResponseTemplate = "🚨 *SPENDLOG FİYAT ALARMI TETİKLENDİ!*\n\n🪙 *Varlık:* `{Symbol}` ({Name})\n🎯 *Hedef:* `{TargetPrice} {Currency}` ({Condition})\n📈 *Anlık Fiyat:* `{CurrentPrice} {Currency}`\n📝 *Not:* _{Note}_\n⏰ *Zaman:* {Time}",
+                    SendType = "Text",
+                    ScheduleType = "Manual",
+                    IsActive = true,
+                    UserId = user.Id
                 }
             };
             _context.TelegramRules.AddRange(defaultRules);

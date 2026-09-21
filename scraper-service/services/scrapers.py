@@ -8,6 +8,7 @@ from services.headers import HeaderRotator
 from services.resilience import report_selector_failure
 from services.throttler import host_throttler
 from services.circuit_breaker import circuit_registry
+from services.cache import market_cache
 
 class FinancialScraperService:
     def __init__(self):
@@ -66,6 +67,42 @@ class FinancialScraperService:
             scraper_logger.debug(f"CNBC Quote error for {symbol}: {e}")
         return None
 
+    async def get_tradingview_stocks(self, symbols: List[str]) -> Dict[str, Any]:
+        """
+        TradingView Turkey Scanner API üzerinden BIST hisselerini ultra hızlı (50ms) çeker.
+        """
+        try:
+            tv_url = "https://scanner.tradingview.com/turkey/scan"
+            tickers = []
+            for s in symbols:
+                clean = s.upper().replace(".IS", "").replace(".E", "").strip()
+                tickers.append(f"BIST:{clean}")
+            payload = {
+                "symbols": {"tickers": tickers},
+                "columns": ["name", "close", "change", "volume", "description"]
+            }
+            async with httpx.AsyncClient(headers=self.headers, timeout=5.0) as client:
+                await host_throttler.acquire(tv_url)
+                r = await client.post(tv_url, json=payload)
+                if r.status_code == 200:
+                    data = r.json().get("data", [])
+                    res = {}
+                    for item in data:
+                        ticker = item.get("s", "").replace("BIST:", "")
+                        d = item.get("d", [])
+                        if len(d) >= 3 and d[1] is not None:
+                            res[ticker] = {
+                                "symbol": ticker,
+                                "price": round(float(d[1]), 2),
+                                "change": round(float(d[2] or 0.0), 2),
+                                "currency": "TRY",
+                                "name": d[4] if len(d) > 4 else ticker
+                            }
+                    return res
+        except Exception as e:
+            scraper_logger.debug(f"TradingView scanner error: {e}")
+        return {}
+
     async def get_stock_data(self, symbol: str) -> Dict[str, Any]:
         """
         BIST, ABD Hisse & Majör Endekslerin Fiyat ve Değişim Oranlarını Çeker.
@@ -74,6 +111,20 @@ class FinancialScraperService:
         sym = symbol.upper().strip()
         is_index = sym.startswith("^") or sym in ["XU100", "BIST100", "SP500", "NASDAQ", "DXY", "DX-Y.NYB", "XBANK", "XHOLD", "XUSIN", "XULAS", "XGMYO"]
         clean_symbol = sym.replace(".IS", "").replace(".E", "").strip()
+
+        # 0. Önbellek Kontrolü (L1 / L2 RAM)
+        bist_cached = market_cache.get("category:bist")
+        if isinstance(bist_cached, list):
+            for item in bist_cached:
+                if isinstance(item, dict) and item.get("symbol") == clean_symbol and item.get("price") is not None:
+                    return item
+
+        # 0.1 BIST için TradingView Hızlı Scanner
+        if not is_index and not sym.startswith("^") and len(clean_symbol) <= 6:
+            tv_data = await self.get_tradingview_stocks([clean_symbol])
+            if clean_symbol in tv_data and tv_data[clean_symbol].get("price") is not None:
+                scraper_logger.info(f"[TRADINGVIEW BIST] {clean_symbol} -> {tv_data[clean_symbol]['price']} TRY ({tv_data[clean_symbol]['change']:+.2f}%)")
+                return tv_data[clean_symbol]
 
         # Özel Tahvil Sembolleri için Doğrudan CNBC Quote API
         if clean_symbol in ["US2Y", "2YY=F"]:
@@ -175,7 +226,8 @@ class FinancialScraperService:
                 scraper_logger.debug(f"BigPara fallback error for {clean_symbol}: {e}")
 
         # 4. Kaynak: yfinance Ticker Fast-Info Fallback (Yahoo 429 Bot Kalkanını Aşar)
-        yf_res = await asyncio.to_thread(self._fetch_yfinance_fast_info, yahoo_sym)
+        yf_symbol = f"{clean_symbol}.IS" if (not is_index and not sym.startswith("^") and not "=" in yahoo_sym and not yahoo_sym.endswith(".IS")) else yahoo_sym
+        yf_res = await asyncio.to_thread(self._fetch_yfinance_fast_info, yf_symbol)
         if yf_res and yf_res.get("price") is not None:
             yf_res["symbol"] = clean_symbol
             return yf_res

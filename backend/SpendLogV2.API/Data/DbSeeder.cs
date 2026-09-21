@@ -151,11 +151,46 @@ public static class DbSeeder
                     SendType = "ChartAndPdf",
                     ScheduleType = "Manual",
                     UserId = adminUser.Id
+                },
+                new()
+                {
+                    Command = "EVENT_PRICE_ALERT",
+                    Title = "Fiyat Alarmı Bildirimi",
+                    Description = "Varlık hedef fiyata ulaştığında veya altına düştüğünde iletilen dinamik Telegram alarm şablonu.",
+                    Pattern = "EVENT_PRICE_ALERT",
+                    ActionType = "PriceAlert",
+                    ResponseTemplate = "🚨 *SPENDLOG FİYAT ALARMI TETİKLENDİ!*\n\n🪙 *Varlık:* `{Symbol}` ({Name})\n🎯 *Hedef:* `{TargetPrice} {Currency}` ({Condition})\n📈 *Anlık Fiyat:* `{CurrentPrice} {Currency}`\n📝 *Not:* _{Note}_\n⏰ *Zaman:* {Time}",
+                    SendType = "Text",
+                    ScheduleType = "Manual",
+                    IsActive = true,
+                    UserId = adminUser.Id
                 }
             };
 
             context.TelegramRules.AddRange(defaultRules);
             await context.SaveChangesAsync();
+        }
+        else
+        {
+            // Mevcut veritabanlarında EVENT_PRICE_ALERT kuralı eksikse otomatik ekle
+            var priceAlertExists = await context.TelegramRules.IgnoreQueryFilters().AnyAsync(r => r.UserId == adminUser.Id && r.Command == "EVENT_PRICE_ALERT");
+            if (!priceAlertExists)
+            {
+                context.TelegramRules.Add(new TelegramRule
+                {
+                    Command = "EVENT_PRICE_ALERT",
+                    Title = "Fiyat Alarmı Bildirimi",
+                    Description = "Varlık hedef fiyata ulaştığında veya altına düştüğünde iletilen dinamik Telegram alarm şablonu.",
+                    Pattern = "EVENT_PRICE_ALERT",
+                    ActionType = "PriceAlert",
+                    ResponseTemplate = "🚨 *SPENDLOG FİYAT ALARMI TETİKLENDİ!*\n\n🪙 *Varlık:* `{Symbol}` ({Name})\n🎯 *Hedef:* `{TargetPrice} {Currency}` ({Condition})\n📈 *Anlık Fiyat:* `{CurrentPrice} {Currency}`\n📝 *Not:* _{Note}_\n⏰ *Zaman:* {Time}",
+                    SendType = "Text",
+                    ScheduleType = "Manual",
+                    IsActive = true,
+                    UserId = adminUser.Id
+                });
+                await context.SaveChangesAsync();
+            }
         }
 
         // 5. Varsayılan Scraping Scheduler Ayarları

@@ -38,6 +38,9 @@ interface JobStatus {
   category?: 'stocks' | 'commodities' | 'crypto' | 'macro';
   source_name?: string;
   target_url?: string;
+  backup_source_name?: string;
+  backup_url?: string;
+  active_source?: 'primary' | 'backup' | string;
   tags?: string[];
   cron_expression: string;
   is_enabled: boolean;
@@ -85,7 +88,9 @@ export default function SchedulerPage() {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [editingCron, setEditingCron] = useState<Record<string, string>>({});
   const [targetUrls, setTargetUrls] = useState<Record<string, string>>({});
+  const [backupUrls, setBackupUrls] = useState<Record<string, string>>({});
   const [savedUrlStatus, setSavedUrlStatus] = useState<Record<string, boolean>>({});
+  const [savedBackupUrlStatus, setSavedBackupUrlStatus] = useState<Record<string, boolean>>({});
   const [expandedSummary, setExpandedSummary] = useState<Record<string, boolean>>({});
 
   const fetchSchedulerStatus = async () => {
@@ -98,15 +103,19 @@ export default function SchedulerPage() {
 
       const crons: Record<string, string> = {};
       const urls: Record<string, string> = {};
+      const bUrls: Record<string, string> = {};
 
       Object.keys(fetchedJobs).forEach((k) => {
         crons[k] = fetchedJobs[k].cron_expression;
         const savedUrl = typeof window !== 'undefined' ? localStorage.getItem(`spendlog_scraper_url_${k}`) : null;
         urls[k] = savedUrl || fetchedJobs[k].target_url || '';
+        const savedBackup = typeof window !== 'undefined' ? localStorage.getItem(`spendlog_scraper_backup_url_${k}`) : null;
+        bUrls[k] = savedBackup || fetchedJobs[k].backup_url || '';
       });
 
       setEditingCron(crons);
       setTargetUrls(urls);
+      setBackupUrls(bUrls);
     } catch (err) {
       console.error('Failed to fetch scheduler status', err);
       toast.error('Kazıyıcı servis durumu alınamadı. Backend servisini kontrol edin.');
@@ -185,6 +194,26 @@ export default function SchedulerPage() {
     toast.success(`${jobKey} hedef URL adresi güncellendi.`);
     setTimeout(() => {
       setSavedUrlStatus((prev) => ({ ...prev, [jobKey]: false }));
+    }, 2500);
+  };
+
+  const handleSaveBackupUrl = async (jobKey: string) => {
+    const bUrl = backupUrls[jobKey] || '';
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`spendlog_scraper_backup_url_${jobKey}`, bUrl);
+    }
+    try {
+      await axios.post('http://localhost:8000/api/scheduler/update-backup-url', {
+        job_key: jobKey,
+        target_url: bUrl,
+      });
+    } catch {
+      // Backend URL endpoint fallback
+    }
+    setSavedBackupUrlStatus((prev) => ({ ...prev, [jobKey]: true }));
+    toast.success(`${jobKey} yedek kaynak URL / yöntemi güncellendi.`);
+    setTimeout(() => {
+      setSavedBackupUrlStatus((prev) => ({ ...prev, [jobKey]: false }));
     }, 2500);
   };
 
@@ -421,6 +450,8 @@ export default function SchedulerPage() {
             const isTogglingNow = togglingJob === key;
             const currentUrl = targetUrls[key] || job.target_url || '';
             const isUrlSaved = savedUrlStatus[key];
+            const currentBackupUrl = backupUrls[key] || job.backup_url || '';
+            const isBackupUrlSaved = savedBackupUrlStatus[key];
             const isSummaryOpen = expandedSummary[key] ?? false;
 
             return (
@@ -482,12 +513,35 @@ export default function SchedulerPage() {
                     </div>
                   </div>
 
-                  {/* Kaynak Bilgisi & Etiketler */}
+                  {/* Kaynak Bilgisi, Aktif Hat Rozeti & Etiketler */}
                   <div className="flex flex-wrap items-center gap-1.5 mb-3.5">
                     <span className="text-[10px] bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded-md border border-slate-700 font-medium flex items-center gap-1">
-                      <span>Kaynak:</span>
+                      <span>Birincil:</span>
                       <strong className="text-white">{job.source_name || 'API / Scraper'}</strong>
                     </span>
+
+                    {/* Çift Hatlı Failover Aktif Hat Rozeti */}
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-md border font-semibold flex items-center gap-1 ${
+                        job.active_source === 'backup'
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                      }`}
+                      title={job.active_source === 'backup' ? 'Birincil hat yanıt vermedi, yedek hat devrede!' : 'Birincil hat normal çalışıyor'}
+                    >
+                      {job.active_source === 'backup' ? (
+                        <>
+                          <Zap className="w-2.5 h-2.5 text-amber-400" />
+                          <span>Aktif Hat: Yedek ({job.backup_source_name || 'Yedek'})</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                          <span>Aktif Hat: Birincil</span>
+                        </>
+                      )}
+                    </span>
+
                     {(job.tags || []).map((t, idx) => (
                       <span key={idx} className="text-[10px] bg-slate-950 text-slate-400 px-2 py-0.5 rounded-md">
                         #{t}
@@ -495,14 +549,14 @@ export default function SchedulerPage() {
                     ))}
                   </div>
 
-                  {/* Kaynak URL Düzenleme Kutusu */}
-                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 space-y-1.5 mb-3">
+                  {/* Birincil Hedef URL Düzenleme Kutusu */}
+                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 space-y-1.5 mb-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
                         <Globe className="w-3 h-3 text-indigo-400" />
-                        <span>Hedef URL:</span>
+                        <span>Birincil Hedef URL:</span>
                       </label>
-                      {currentUrl && (
+                      {currentUrl && currentUrl.startsWith('http') && (
                         <a
                           href={currentUrl}
                           target="_blank"
@@ -533,6 +587,51 @@ export default function SchedulerPage() {
                       >
                         {isUrlSaved ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3 text-indigo-400" />}
                         <span>{isUrlSaved ? 'Kaydedildi' : 'Kaydet'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Yedek Hedef URL / Yöntem Düzenleme Kutusu */}
+                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 space-y-1.5 mb-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-amber-400" />
+                        <span>Yedek Hedef URL / Yöntem:</span>
+                        {job.backup_source_name && (
+                          <span className="text-[10px] text-amber-300 font-mono font-medium">({job.backup_source_name})</span>
+                        )}
+                      </label>
+                      {currentBackupUrl && currentBackupUrl.startsWith('http') && (
+                        <a
+                          href={currentBackupUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold"
+                        >
+                          <span>Yedek Kaynağı Aç</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={backupUrls[key] || ''}
+                        onChange={(e) => setBackupUrls({ ...backupUrls, [key]: e.target.value })}
+                        placeholder="Yedek URL veya Yöntem (Örn: https://...)"
+                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-mono text-white focus:outline-none focus:ring-1 focus:ring-amber-500 truncate"
+                      />
+                      <button
+                        onClick={() => handleSaveBackupUrl(key)}
+                        className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                          isBackupUrlSaved
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                        }`}
+                      >
+                        {isBackupUrlSaved ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3 text-amber-400" />}
+                        <span>{isBackupUrlSaved ? 'Kaydedildi' : 'Kaydet'}</span>
                       </button>
                     </div>
                   </div>
