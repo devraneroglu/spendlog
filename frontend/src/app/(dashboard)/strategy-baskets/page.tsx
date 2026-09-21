@@ -131,8 +131,8 @@ export default function StrategyBasketsPage() {
       } else {
         setSelectedBasketId(null);
       }
-    } catch (err) {
-      console.error('Failed to fetch strategy baskets', err);
+    } catch (err: any) {
+      console.warn('Strateji sepetleri alınırken uyarı:', err?.message || err);
     } finally {
       setIsLoading(false);
     }

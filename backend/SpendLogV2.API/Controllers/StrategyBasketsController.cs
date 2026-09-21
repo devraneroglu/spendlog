@@ -8,6 +8,7 @@ namespace SpendLogV2.API.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
+[Route("api/strategy-baskets")]
 public class StrategyBasketsController : ControllerBase
 {
     private readonly IMediator _mediator;

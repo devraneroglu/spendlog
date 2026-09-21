@@ -418,8 +418,8 @@ export default function PortfolioPage() {
         }
       }
       await fetchAlerts();
-    } catch (err) {
-      console.error('Failed to fetch portfolio data', err);
+    } catch (err: any) {
+      console.warn('Portföy verileri alınırken uyarı:', err?.message || err);
     } finally {
       setIsLoading(false);
     }
@@ -456,8 +456,8 @@ export default function PortfolioPage() {
     try {
       const res = await api.get<PriceAlert[]>('/api/pricealerts');
       setAlerts(res.data || []);
-    } catch (err) {
-      console.error('Alarmlar yüklenemedi:', err);
+    } catch (err: any) {
+      console.warn('Alarmlar yüklenirken uyarı:', err?.message || err);
     }
   };
 

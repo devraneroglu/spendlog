@@ -7,6 +7,7 @@ namespace SpendLogV2.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Route("api/price-alerts")]
 [Authorize]
 public class PriceAlertsController : ControllerBase
 {
