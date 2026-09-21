@@ -558,36 +558,88 @@ class FinancialScraperService:
         res = await self.get_currency_data(base, target)
         return res.get("rate")
 
+    _indices_cache: Dict[str, Dict[str, Any]] = {}
+    _indices_cache_time: float = 0.0
+
+    async def _fetch_all_bigpara_indices(self) -> Dict[str, Dict[str, Any]]:
+        """BigPara Borsa Endeksler tablosundan (XBANK, XHOLD, XUSIN, XULAS, XGMYO, XU100) canlı fiyat ve değişim oranlarını çeker."""
+        import time
+        from bs4 import BeautifulSoup
+        now = time.time()
+        if FinancialScraperService._indices_cache and (now - FinancialScraperService._indices_cache_time) < 25.0:
+            return FinancialScraperService._indices_cache
+
+        indices: Dict[str, Dict[str, Any]] = {}
+        target_symbols = {"XBANK", "XHOLD", "XUSIN", "XULAS", "XGMYO", "XU100", "XU030", "XU050"}
+
+        try:
+            url = "https://bigpara.hurriyet.com.tr/borsa/endeksler/"
+            await host_throttler.acquire(url)
+            async with httpx.AsyncClient(headers=self.headers, timeout=6.0, follow_redirects=True) as client:
+                r = await client.get(url)
+                if r.status_code == 200:
+                    soup = BeautifulSoup(r.text, "html.parser")
+                    for tr in soup.find_all("tr"):
+                        cells = [c.get_text(strip=True) for c in tr.find_all(["td", "th"])]
+                        if cells and len(cells) >= 5:
+                            sym = cells[0].strip().upper()
+                            if sym in target_symbols:
+                                price_val = DataSanitizer.to_float(cells[2])
+                                chg_val = DataSanitizer.extract_change_percent(cells[4])
+                                if price_val > 0:
+                                    indices[sym] = {
+                                        "symbol": sym,
+                                        "price": round(price_val, 2),
+                                        "change": round(chg_val, 2),
+                                        "currency": "TRY"
+                                    }
+                    if indices:
+                        FinancialScraperService._indices_cache = indices
+                        FinancialScraperService._indices_cache_time = now
+                        scraper_logger.info(f"[BIGPARA INDICES] Başarıyla çekildi: {len(indices)} endeks.")
+                    else:
+                        await report_selector_failure("BigPara Endeksler", "tr", r.text[:200])
+        except Exception as e:
+            scraper_logger.error(f"BigPara indices parse error: {e}")
+
+        return indices or FinancialScraperService._indices_cache
+
     async def get_market_indices(self) -> Dict[str, Any]:
         """XU100, S&P 500, NASDAQ ve BIST Sektör Endekslerini (XBANK, XHOLD, XUSIN, XULAS, XGMYO) eşzamanlı çeker."""
-        xu, sp, nq, xbank, xhold, xusin, xulas, xgmyo = await asyncio.gather(
+        xu, sp, nq, bp_indices = await asyncio.gather(
             self.get_stock_data("XU100"),
             self.get_stock_data("^GSPC"),
             self.get_stock_data("^IXIC"),
-            self.get_stock_data("XBANK"),
-            self.get_stock_data("XHOLD"),
-            self.get_stock_data("XUSIN"),
-            self.get_stock_data("XULAS"),
-            self.get_stock_data("XGMYO"),
+            self._fetch_all_bigpara_indices(),
             return_exceptions=True
         )
 
+        bp_dict = bp_indices if isinstance(bp_indices, dict) else {}
+
         def _safe_res(res, sym, fallback_price, cur="TRY"):
+            if sym in bp_dict and bp_dict[sym].get("price"):
+                return bp_dict[sym]
             if not isinstance(res, Exception) and isinstance(res, dict) and res.get("price"):
                 return res
             return {"symbol": sym, "price": fallback_price, "change": 0.0, "currency": cur}
 
+        xu_final = _safe_res(xu, "XU100", 14000.0, "TRY")
+        sp_final = _safe_res(sp, "^GSPC", 7700.0, "USD")
+        nq_final = _safe_res(nq, "^IXIC", 26500.0, "USD")
+
+        sectors = {
+            "XBANK": _safe_res(bp_dict.get("XBANK"), "XBANK", 16650.0, "TRY"),
+            "XHOLD": _safe_res(bp_dict.get("XHOLD"), "XHOLD", 14460.0, "TRY"),
+            "XUSIN": _safe_res(bp_dict.get("XUSIN"), "XUSIN", 19470.0, "TRY"),
+            "XULAS": _safe_res(bp_dict.get("XULAS"), "XULAS", 36080.0, "TRY"),
+            "XGMYO": _safe_res(bp_dict.get("XGMYO"), "XGMYO", 6120.0, "TRY"),
+        }
+
         return {
-            "XU100": _safe_res(xu, "XU100", 14000.0, "TRY"),
-            "SP500": _safe_res(sp, "^GSPC", 7700.0, "USD"),
-            "NASDAQ": _safe_res(nq, "^IXIC", 26500.0, "USD"),
-            "sectors": {
-                "XBANK": _safe_res(xbank, "XBANK", 16650.0, "TRY"),
-                "XHOLD": _safe_res(xhold, "XHOLD", 14460.0, "TRY"),
-                "XUSIN": _safe_res(xusin, "XUSIN", 19470.0, "TRY"),
-                "XULAS": _safe_res(xulas, "XULAS", 36080.0, "TRY"),
-                "XGMYO": _safe_res(xgmyo, "XGMYO", 6120.0, "TRY"),
-            }
+            "XU100": xu_final,
+            "SP500": sp_final,
+            "NASDAQ": nq_final,
+            "sectors": sectors
         }
 
     _sentiment_cache: Dict[str, Any] = {}

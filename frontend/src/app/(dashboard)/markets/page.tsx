@@ -1185,9 +1185,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XBANK</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XBANK?.price || 16653).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XBANK?.price || 16717).toLocaleString('tr-TR')}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XBANK?.change} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XBANK?.change ?? 1.90} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
 
@@ -1196,9 +1196,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XHOLD</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XHOLD?.price || 14461).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XHOLD?.price || 12793).toLocaleString('tr-TR')}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XHOLD?.change} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XHOLD?.change ?? -1.89} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
 
@@ -1207,9 +1207,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XUSIN</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XUSIN?.price || 19470).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XUSIN?.price || 17926).toLocaleString('tr-TR')}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XUSIN?.change} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XUSIN?.change ?? -1.14} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
 
@@ -1218,9 +1218,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XULAS</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XULAS?.price || 36081).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XULAS?.price || 33869).toLocaleString('tr-TR')}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XULAS?.change} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XULAS?.change ?? 2.22} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
 
@@ -1229,9 +1229,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XGMYO</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XGMYO?.price || 6126).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XGMYO?.price || 5584).toLocaleString('tr-TR')}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XGMYO?.change} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XGMYO?.change ?? -1.89} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
             </div>

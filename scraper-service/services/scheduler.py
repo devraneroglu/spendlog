@@ -347,6 +347,14 @@ class DynamicSchedulerService:
             if "BIST_STOCKS" in self.job_statuses:
                 self.job_statuses["BIST_STOCKS"]["active_source"] = active_src
 
+            try:
+                bp_indices = await self.scrapers._fetch_all_bigpara_indices()
+                for s in sector_symbols:
+                    if s in bp_indices:
+                        results[s] = bp_indices[s]
+            except Exception as e:
+                scraper_logger.debug(f"Scheduler BigPara indices fetch note: {e}")
+
             sectors_dict = {s: results[s] for s in sector_symbols if s in results}
 
             self.latest_prices["bist"] = results

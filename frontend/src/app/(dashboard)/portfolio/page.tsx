@@ -92,6 +92,42 @@ const CURRENCY_LABELS: Record<Currency, string> = {
   [Currency.ETH]: 'ETH',
 };
 
+interface PortfolioColumnConfig {
+  id: string;
+  label: string;
+  defaultVisible: boolean;
+}
+
+const PORTFOLIO_COLUMNS: PortfolioColumnConfig[] = [
+  { id: 'symbol', label: 'Sembol & Adı', defaultVisible: true },
+  { id: 'assetType', label: 'Varlık Türü', defaultVisible: true },
+  { id: 'platform', label: 'Platform', defaultVisible: true },
+  { id: 'purchaseDate', label: 'Tarih', defaultVisible: true },
+  { id: 'holdingPeriod', label: 'Elde Tutma Süresi', defaultVisible: true },
+  { id: 'quantity', label: 'Miktar', defaultVisible: true },
+  { id: 'purchasePrice', label: 'Alış Fiyatı', defaultVisible: true },
+  { id: 'cost', label: 'Maliyet', defaultVisible: true },
+  { id: 'currentPrice', label: 'Güncel / Satış Fiyatı', defaultVisible: true },
+  { id: 'totalValue', label: 'Toplam Değer / Satış Tutarı', defaultVisible: true },
+  { id: 'profitLoss', label: 'Kâr / Zarar', defaultVisible: true },
+  { id: 'actions', label: 'İşlemler', defaultVisible: true },
+];
+
+const DEFAULT_VISIBLE_COLUMNS: Record<string, boolean> = {
+  symbol: true,
+  assetType: true,
+  platform: true,
+  purchaseDate: true,
+  holdingPeriod: true,
+  quantity: true,
+  purchasePrice: true,
+  cost: true,
+  currentPrice: true,
+  totalValue: true,
+  profitLoss: true,
+  actions: true,
+};
+
 const CustomDonutTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -212,6 +248,48 @@ export default function PortfolioPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAssetType, setFilterAssetType] = useState<string>('');
   const [filterPlatform, setFilterPlatform] = useState<string>('');
+
+  // Column Visibility Management State
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(DEFAULT_VISIBLE_COLUMNS);
+  const [isColumnDropdownOpen, setIsColumnDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('spendlog_portfolio_columns_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed === 'object' && parsed !== null) {
+          setVisibleColumns((prev) => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch (_) {}
+  }, []);
+
+  const toggleColumn = (colId: string) => {
+    setVisibleColumns((prev) => {
+      const updated = { ...prev, [colId]: !prev[colId] };
+      try {
+        localStorage.setItem('spendlog_portfolio_columns_v2', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+  };
+
+  const resetColumns = () => {
+    setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+    try {
+      localStorage.setItem('spendlog_portfolio_columns_v2', JSON.stringify(DEFAULT_VISIBLE_COLUMNS));
+    } catch (_) {}
+  };
+
+  const selectAllColumns = () => {
+    const all: Record<string, boolean> = {};
+    PORTFOLIO_COLUMNS.forEach((c) => { all[c.id] = true; });
+    setVisibleColumns(all);
+    try {
+      localStorage.setItem('spendlog_portfolio_columns_v2', JSON.stringify(all));
+    } catch (_) {}
+  };
 
   // Simulation Mode State
   const [simulationPercent, setSimulationPercent] = useState<number>(10);
@@ -1341,7 +1419,7 @@ export default function PortfolioPage() {
 
   const displayedItems = useMemo(() => {
     const list = activeTab === 'ACTIVE' ? activeItems : soldItems;
-    return list.filter((i) => {
+    const filtered = list.filter((i) => {
       if (filterAssetType && i.assetType !== Number(filterAssetType)) return false;
       if (filterPlatform && (i.platform || '') !== filterPlatform) return false;
       if (searchTerm) {
@@ -1349,6 +1427,17 @@ export default function PortfolioPage() {
         return i.symbol.toLowerCase().includes(lower) || i.name.toLowerCase().includes(lower);
       }
       return true;
+    });
+
+    return filtered.sort((a, b) => {
+      if (activeTab === 'ACTIVE') {
+        const timeA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
+        const timeB = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
+        return timeB - timeA;
+      }
+      const timeA = a.saleDate ? new Date(a.saleDate).getTime() : (a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0);
+      const timeB = b.saleDate ? new Date(b.saleDate).getTime() : (b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0);
+      return timeB - timeA;
     });
   }, [activeTab, activeItems, soldItems, filterAssetType, filterPlatform, searchTerm]);
 
@@ -1969,9 +2058,80 @@ export default function PortfolioPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-500 font-medium">
+              <span className="text-xs text-slate-500 font-medium hidden sm:inline">
                 Toplam {displayedItems.length} kayıt listelendi
               </span>
+
+              {/* Sütun Ayarları Popover */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsColumnDropdownOpen(!isColumnDropdownOpen)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition cursor-pointer shadow-sm"
+                  title="Görüntülenecek sütunları seçin ve yönetin"
+                >
+                  <Settings2 className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Sütun Ayarları</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isColumnDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isColumnDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsColumnDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-slate-700/90 rounded-2xl p-3 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                        <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <Settings2 className="w-3.5 h-3.5 text-indigo-400" />
+                          Sütunları Yönet
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={selectAllColumns}
+                            className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold px-1.5 py-0.5 rounded hover:bg-indigo-500/10 cursor-pointer"
+                          >
+                            Tümü
+                          </button>
+                          <span className="text-slate-600 text-xs">•</span>
+                          <button
+                            type="button"
+                            onClick={resetColumns}
+                            className="text-[10px] text-slate-400 hover:text-slate-200 font-semibold px-1.5 py-0.5 rounded hover:bg-slate-800 cursor-pointer"
+                          >
+                            Sıfırla
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-64 overflow-y-auto space-y-1 pr-1 text-xs">
+                        {PORTFOLIO_COLUMNS.map((col) => {
+                          const isChecked = visibleColumns[col.id] ?? true;
+                          return (
+                            <label
+                              key={col.id}
+                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer text-slate-300 hover:text-white transition select-none"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleColumn(col.id)}
+                                disabled={col.id === 'symbol'}
+                                className="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 accent-indigo-500 cursor-pointer"
+                              />
+                              <span className={col.id === 'symbol' ? 'font-bold text-white' : ''}>
+                                {col.label}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
               {/* Yeni Varlık Butonu (Filtre Barına Taşındı) */}
               <button
@@ -1990,22 +2150,26 @@ export default function PortfolioPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Sembol</th>
-                    <th className="py-2.5 px-3">Tür</th>
-                    <th className="py-2.5 px-3">Platform</th>
-                    <th className="py-2.5 px-3">Tarih</th>
-                    {activeTab === 'SOLD' && <th className="py-2.5 px-3 text-center">Elde Tutma</th>}
-                    <th className="py-2.5 px-3 text-right">Miktar</th>
-                    <th className="py-2.5 px-3 text-right">Alış Fiyatı</th>
-                    <th className="py-2.5 px-3 text-right">Maliyet</th>
-                    <th className="py-2.5 px-3 text-right">
-                      {activeTab === 'ACTIVE' ? 'Güncel Fiyat' : 'Satış Fiyatı'}
-                    </th>
-                    <th className="py-2.5 px-3 text-right">
-                      {activeTab === 'ACTIVE' ? 'Toplam Değer' : 'Satış Tutarı'}
-                    </th>
-                    <th className="py-2.5 px-3 text-right">Kar / Zarar</th>
-                    <th className="py-2.5 px-3 text-center">İşlemler</th>
+                    {(visibleColumns.symbol ?? true) && <th className="py-2.5 px-3">Sembol</th>}
+                    {(visibleColumns.assetType ?? true) && <th className="py-2.5 px-3">Tür</th>}
+                    {(visibleColumns.platform ?? true) && <th className="py-2.5 px-3">Platform</th>}
+                    {(visibleColumns.purchaseDate ?? true) && <th className="py-2.5 px-3">Tarih</th>}
+                    {(visibleColumns.holdingPeriod ?? true) && <th className="py-2.5 px-3 text-center">Elde Tutma</th>}
+                    {(visibleColumns.quantity ?? true) && <th className="py-2.5 px-3 text-right">Miktar</th>}
+                    {(visibleColumns.purchasePrice ?? true) && <th className="py-2.5 px-3 text-right">Alış Fiyatı</th>}
+                    {(visibleColumns.cost ?? true) && <th className="py-2.5 px-3 text-right">Maliyet</th>}
+                    {(visibleColumns.currentPrice ?? true) && (
+                      <th className="py-2.5 px-3 text-right">
+                        {activeTab === 'ACTIVE' ? 'Güncel Fiyat' : 'Satış Fiyatı'}
+                      </th>
+                    )}
+                    {(visibleColumns.totalValue ?? true) && (
+                      <th className="py-2.5 px-3 text-right">
+                        {activeTab === 'ACTIVE' ? 'Toplam Değer' : 'Satış Tutarı'}
+                      </th>
+                    )}
+                    {(visibleColumns.profitLoss ?? true) && <th className="py-2.5 px-3 text-right">Kar / Zarar</th>}
+                    {(visibleColumns.actions ?? true) && <th className="py-2.5 px-3 text-center">İşlemler</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 text-xs">
@@ -2018,11 +2182,10 @@ export default function PortfolioPage() {
                       const isCrypto = it.assetType === AssetType.Crypto;
 
                       const getHoldingDays = (pDate: string, sDate?: string | null) => {
-                        if (!sDate) return '-';
                         const start = new Date(pDate).getTime();
-                        const end = new Date(sDate).getTime();
+                        const end = sDate ? new Date(sDate).getTime() : Date.now();
                         const diffDays = Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
-                        if (diffDays === 0) return 'Aynı Gün';
+                        if (diffDays === 0) return 'Bugün';
                         if (diffDays < 30) return `${diffDays} Gün`;
                         const months = Math.floor(diffDays / 30);
                         const remDays = diffDays % 30;
@@ -2031,172 +2194,197 @@ export default function PortfolioPage() {
 
                       return (
                         <tr key={it.id} className="hover:bg-slate-800/40 transition">
-                          <td className="py-2 px-3">
-                            <span className="font-bold text-white block">{it.symbol}</span>
-                            <span className="text-[11px] text-slate-500 truncate">{it.name}</span>
-                          </td>
-                          <td className="py-2 px-3 whitespace-nowrap">
-                            <span className="text-[11px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md font-medium">
-                              {ASSET_TYPE_NAMES[it.assetType] || 'Varlık'}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-slate-300 font-medium whitespace-nowrap">{it.platform || 'Genel'}</td>
-                          <td className="py-2 px-3 font-mono whitespace-nowrap">
-                            <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                              <span className="text-[10px] text-slate-500 font-sans font-medium">Alış:</span>
-                              <span className="font-semibold text-slate-200">{date.toLocaleDateString('tr-TR')}</span>
-                            </div>
-                            {saleD && (
-                              <div className="flex items-center gap-1.5 text-xs text-amber-400 mt-0.5">
-                                <span className="text-[10px] text-amber-500/80 font-sans font-medium">Satış:</span>
-                                <span className="font-semibold">{saleD.toLocaleDateString('tr-TR')}</span>
+                          {(visibleColumns.symbol ?? true) && (
+                            <td className="py-2 px-3">
+                              <span className="font-bold text-white block">{it.symbol}</span>
+                              <span className="text-[11px] text-slate-500 truncate">{it.name}</span>
+                            </td>
+                          )}
+                          {(visibleColumns.assetType ?? true) && (
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span className="text-[11px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md font-medium">
+                                {ASSET_TYPE_NAMES[it.assetType] || 'Varlık'}
+                              </span>
+                            </td>
+                          )}
+                          {(visibleColumns.platform ?? true) && (
+                            <td className="py-2 px-3 text-slate-300 font-medium whitespace-nowrap">{it.platform || 'Genel'}</td>
+                          )}
+                          {(visibleColumns.purchaseDate ?? true) && (
+                            <td className="py-2 px-3 font-mono whitespace-nowrap">
+                              <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                                <span className="text-[10px] text-slate-500 font-sans font-medium">Alış:</span>
+                                <span className="font-semibold text-slate-200">{date.toLocaleDateString('tr-TR')}</span>
                               </div>
-                            )}
-                            {it.currency === Currency.USD && (
-                              <div className="text-[10px] font-mono mt-1 space-y-0.5">
-                                <div
-                                  className="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 w-fit"
-                                  title="Alış tarihindeki USD/TL referans kuru"
-                                >
-                                  <span className="text-[9px] text-emerald-500/80 font-sans font-medium">Alış Kuru:</span>
-                                  <span className="font-bold">
-                                    {getUsdRateForDate(it.purchaseDate).toLocaleString('tr-TR', {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}{' '}
-                                    ₺
-                                  </span>
+                              {saleD && (
+                                <div className="flex items-center gap-1.5 text-xs text-amber-400 mt-0.5">
+                                  <span className="text-[10px] text-amber-500/80 font-sans font-medium">Satış:</span>
+                                  <span className="font-semibold">{saleD.toLocaleDateString('tr-TR')}</span>
                                 </div>
-                                {saleD && (
+                              )}
+                              {it.currency === Currency.USD && (
+                                <div className="text-[10px] font-mono mt-1 space-y-0.5">
                                   <div
-                                    className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 w-fit"
-                                    title="Satış tarihindeki USD/TL referans kuru"
+                                    className="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 w-fit"
+                                    title="Alış tarihindeki USD/TL referans kuru"
                                   >
-                                    <span className="text-[9px] text-amber-500/80 font-sans font-medium">Satış Kuru:</span>
+                                    <span className="text-[9px] text-emerald-500/80 font-sans font-medium">Alış Kuru:</span>
                                     <span className="font-bold">
-                                      {getUsdRateForDate(it.saleDate).toLocaleString('tr-TR', {
+                                      {getUsdRateForDate(it.purchaseDate).toLocaleString('tr-TR', {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2,
                                       })}{' '}
                                       ₺
                                     </span>
                                   </div>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                          {activeTab === 'SOLD' && (
+                                  {saleD && (
+                                    <div
+                                      className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 w-fit"
+                                      title="Satış tarihindeki USD/TL referans kuru"
+                                    >
+                                      <span className="text-[9px] text-amber-500/80 font-sans font-medium">Satış Kuru:</span>
+                                      <span className="font-bold">
+                                        {getUsdRateForDate(it.saleDate).toLocaleString('tr-TR', {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}{' '}
+                                        ₺
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          )}
+                          {(visibleColumns.holdingPeriod ?? true) && (
                             <td className="py-2 px-3 text-center whitespace-nowrap">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                                title={`Alış: ${new Date(it.purchaseDate).toLocaleDateString('tr-TR')}${it.saleDate ? ` • Satış: ${new Date(it.saleDate).toLocaleDateString('tr-TR')}` : ' • Halen aktif'}`}
+                              >
                                 <Clock className="w-3 h-3 text-indigo-400" />
                                 <span>{getHoldingDays(it.purchaseDate, it.saleDate)}</span>
                               </span>
                             </td>
                           )}
-                          <td className="py-2 px-3 text-right font-mono text-slate-300 whitespace-nowrap">
-                            {it.quantity.toLocaleString('tr-TR', { maximumFractionDigits: 8 })}
-                          </td>
-                          <td className="py-2 px-3 text-right text-slate-400 font-mono whitespace-nowrap">
-                            {it.purchasePrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
-                          </td>
-                          <td className="py-2 px-3 text-right text-slate-300 font-mono font-semibold whitespace-nowrap">
-                            {it.cost.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
-                            {it.purchaseCommission > 0 && (
-                              <span className="text-[10px] text-slate-500 block font-normal" title={`Alış Komisyonu: ${it.purchaseCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}>
-                                +{it.purchaseCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kom.
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-white font-mono whitespace-nowrap">
-                            {(it.salePrice || it.currentPrice).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-white whitespace-nowrap">
-                            {isValuesHidden
-                              ? '***'
-                              : `${it.currentValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}
-                            {!it.isActive && it.saleCommission != null && it.saleCommission > 0 && (
-                              <span className="text-[10px] text-amber-500/80 block font-normal" title={`Satış Komisyonu: ${it.saleCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}>
-                                -{it.saleCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kom.
-                              </span>
-                            )}
-                          </td>
-                          <td className={`py-2 px-3 text-right font-bold whitespace-nowrap ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {isValuesHidden ? (
-                              '***'
-                            ) : (
-                              <div>
-                                <span>
-                                  {isProfit ? '+' : ''}
-                                  {it.profitLoss.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
+                          {(visibleColumns.quantity ?? true) && (
+                            <td className="py-2 px-3 text-right font-mono text-slate-300 whitespace-nowrap">
+                              {it.quantity.toLocaleString('tr-TR', { maximumFractionDigits: 8 })}
+                            </td>
+                          )}
+                          {(visibleColumns.purchasePrice ?? true) && (
+                            <td className="py-2 px-3 text-right text-slate-400 font-mono whitespace-nowrap">
+                              {it.purchasePrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
+                            </td>
+                          )}
+                          {(visibleColumns.cost ?? true) && (
+                            <td className="py-2 px-3 text-right text-slate-300 font-mono font-semibold whitespace-nowrap">
+                              {it.cost.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
+                              {it.purchaseCommission > 0 && (
+                                <span className="text-[10px] text-slate-500 block font-normal" title={`Alış Komisyonu: ${it.purchaseCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}>
+                                  +{it.purchaseCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kom.
                                 </span>
-                                <span className="text-[10px] block opacity-80 font-normal">
-                                  ({isProfit ? '+' : ''}
-                                  {it.profitLossPercent.toFixed(2)}%)
-                                </span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => openEditModal(it)}
-                                className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
-                                title="Varlığı Düzenle"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-
-                              {it.isActive && (
-                                <button
-                                  onClick={() =>
-                                    router.push(
-                                      `/price-alerts?symbol=${it.symbol}&name=${encodeURIComponent(
-                                        it.name
-                                      )}&assetType=${it.assetType}&currency=${it.currency}&price=${
-                                        it.currentPrice > 0 ? it.currentPrice : it.purchasePrice
-                                      }`
-                                    )
-                                  }
-                                  className="p-1 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition cursor-pointer"
-                                  title="Fiyat Alarmı Kur"
-                                >
-                                  <Bell className="w-3.5 h-3.5" />
-                                </button>
                               )}
-
-                              {it.isActive ? (
-                                <button
-                                  onClick={() => openSellModal(it)}
-                                  className="p-1 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition cursor-pointer"
-                                  title="Satış Yap"
-                                >
-                                  <Tag className="w-3.5 h-3.5" />
-                                </button>
+                            </td>
+                          )}
+                          {(visibleColumns.currentPrice ?? true) && (
+                            <td className="py-2 px-3 text-right font-bold text-white font-mono whitespace-nowrap">
+                              {(it.salePrice || it.currentPrice).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
+                            </td>
+                          )}
+                          {(visibleColumns.totalValue ?? true) && (
+                            <td className="py-2 px-3 text-right font-bold text-white whitespace-nowrap">
+                              {isValuesHidden
+                                ? '***'
+                                : `${it.currentValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}
+                              {!it.isActive && it.saleCommission != null && it.saleCommission > 0 && (
+                                <span className="text-[10px] text-amber-500/80 block font-normal" title={`Satış Komisyonu: ${it.saleCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}>
+                                  -{it.saleCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kom.
+                                </span>
+                              )}
+                            </td>
+                          )}
+                          {(visibleColumns.profitLoss ?? true) && (
+                            <td className={`py-2 px-3 text-right font-bold whitespace-nowrap ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {isValuesHidden ? (
+                                '***'
                               ) : (
-                                <button
-                                  onClick={() => handleUndoSale(it)}
-                                  className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition cursor-pointer"
-                                  title="Satışı Geri Al (Aktif Portföye Döndür)"
-                                >
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                </button>
+                                <div>
+                                  <span>
+                                    {isProfit ? '+' : ''}
+                                    {it.profitLoss.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
+                                  </span>
+                                  <span className="text-[10px] block opacity-80 font-normal">
+                                    ({isProfit ? '+' : ''}
+                                    {it.profitLossPercent.toFixed(2)}%)
+                                  </span>
+                                </div>
                               )}
+                            </td>
+                          )}
+                          {(visibleColumns.actions ?? true) && (
+                            <td className="py-2 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => openEditModal(it)}
+                                  className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                                  title="Varlığı Düzenle"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
 
-                              <button
-                                onClick={() => handleDeleteItem(it.id, it.symbol)}
-                                className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition cursor-pointer"
-                                title="Varlığı Sil"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
+                                {it.isActive && (
+                                  <button
+                                    onClick={() =>
+                                      router.push(
+                                        `/price-alerts?symbol=${it.symbol}&name=${encodeURIComponent(
+                                          it.name
+                                        )}&assetType=${it.assetType}&currency=${it.currency}&price=${
+                                          it.currentPrice > 0 ? it.currentPrice : it.purchasePrice
+                                        }`
+                                      )
+                                    }
+                                    className="p-1 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition cursor-pointer"
+                                    title="Fiyat Alarmı Kur"
+                                  >
+                                    <Bell className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+
+                                {it.isActive ? (
+                                  <button
+                                    onClick={() => openSellModal(it)}
+                                    className="p-1 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition cursor-pointer"
+                                    title="Satış Yap"
+                                  >
+                                    <Tag className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleUndoSale(it)}
+                                    className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition cursor-pointer"
+                                    title="Satışı Geri Al (Aktif Portföye Döndür)"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => handleDeleteItem(it.id, it.symbol)}
+                                  className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition cursor-pointer"
+                                  title="Varlığı Sil"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={activeTab === 'SOLD' ? 12 : 11} className="text-center py-12 text-slate-500 text-xs">
+                      <td colSpan={Object.values(visibleColumns).filter(Boolean).length || 12} className="text-center py-12 text-slate-500 text-xs">
                         {activeTab === 'ACTIVE'
                           ? 'Henüz eklenmiş aktif bir portföy varlığı bulunmuyor.'
                           : 'Henüz satışı gerçekleşmiş bir varlık kaydı bulunmuyor.'}

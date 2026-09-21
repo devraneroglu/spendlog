@@ -2207,7 +2207,12 @@ export default function CreditCardsPage() {
                           <button
                             onClick={() => {
                               setSelectedPeriod(p.periodKey);
+                              setSearchAllPeriods(false);
                               setShowLiveOnly(false);
+                              setSearchTerm('');
+                              setActiveCardFilter(null);
+                              setSelectedCategoryFilter(null);
+                              setSelectedSubCategoryFilter(null);
                               setActiveTab('EXPENSES');
                             }}
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-600 transition cursor-pointer shadow-sm"
@@ -2756,9 +2761,14 @@ export default function CreditCardsPage() {
                   <PieChart className="w-4 h-4 text-amber-400" />
                   <span>Kategori Harcama Dilimleri</span>
                 </h3>
-                <span className="text-[10px] bg-amber-500/10 text-amber-300 font-bold px-2 py-0.5 rounded-md">
-                  {activePeriodCategoryStats.allCategories.length} Kategori
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-indigo-500/15 text-indigo-300 font-mono font-semibold px-2 py-0.5 rounded-md border border-indigo-500/20">
+                    {searchAllPeriods || selectedPeriod === 'ALL' ? 'Tüm Dönemler' : showLiveOnly ? 'Canlı Fişler' : (activePeriodData?.displayDate || selectedPeriod || 'Tüm Dönemler')}
+                  </span>
+                  <span className="text-[10px] bg-amber-500/10 text-amber-300 font-bold px-2 py-0.5 rounded-md">
+                    {activePeriodCategoryStats.allCategories.length} Kategori
+                  </span>
+                </div>
               </div>
 
               <div className="h-[260px] w-full relative">
@@ -2848,13 +2858,43 @@ export default function CreditCardsPage() {
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="font-bold text-sm text-white">Tüm Kategori ve Alt Kalem Dökümü</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Herhangi bir kategoriye tıklayarak doğrudan harcama satırlarına gidebilirsiniz.
                 </p>
               </div>
+
+              {/* Aktif Dönem Rozeti (Foto 3 Kırmızı Kutu) */}
+              <div className="flex items-center gap-2">
+                <div className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 shadow-sm ${
+                  searchAllPeriods || selectedPeriod === 'ALL'
+                    ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border-indigo-500/40'
+                    : showLiveOnly
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                }`}>
+                  {searchAllPeriods || selectedPeriod === 'ALL' ? (
+                    <>
+                      <Globe className="w-4 h-4 text-indigo-400" />
+                      <span className="font-semibold text-white">Tüm Dönemler</span>
+                    </>
+                  ) : showLiveOnly ? (
+                    <>
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      <span className="font-semibold text-white">Canlı Fişler</span>
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="w-4 h-4 text-indigo-400" />
+                      <span className="text-slate-400 font-normal">Dönem:</span>
+                      <span className="font-semibold text-white">{activePeriodData?.displayDate || selectedPeriod || 'Tüm Dönemler'}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div className="text-right">
                 <span className="text-xs text-slate-400 block">Dönem Toplam Harcaması</span>
                 <span className="text-base font-bold text-white font-mono">
@@ -2956,6 +2996,46 @@ export default function CreditCardsPage() {
       {/* TAB 4: ABONELİK & TEKRARLAYAN HARCAMALAR */}
       {activeTab === 'RECURRING' && (
         <div className="space-y-6">
+          {/* Üst Dönem Bilgisi & Başlık Barı */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                <Repeat className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-white">Abonelik & Tekrarlayan Harcamalar</h3>
+                <p className="text-xs text-slate-400">Ekstreye yansıyan sabit ve periyodik abonelik harcamaları analiz edilir.</p>
+              </div>
+            </div>
+
+            {/* Aktif Dönem Rozeti */}
+            <div className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 shadow-sm ${
+              searchAllPeriods || selectedPeriod === 'ALL'
+                ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border-indigo-500/40'
+                : showLiveOnly
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+            }`}>
+              {searchAllPeriods || selectedPeriod === 'ALL' ? (
+                <>
+                  <Globe className="w-4 h-4 text-indigo-400" />
+                  <span className="font-semibold text-white">Tüm Dönemler</span>
+                </>
+              ) : showLiveOnly ? (
+                <>
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <span className="font-semibold text-white">Canlı Fişler</span>
+                </>
+              ) : (
+                <>
+                  <Calendar className="w-4 h-4 text-indigo-400" />
+                  <span className="text-slate-400 font-normal">Dönem:</span>
+                  <span className="font-semibold text-white">{activePeriodData?.displayDate || selectedPeriod || 'Tüm Dönemler'}</span>
+                </>
+              )}
+            </div>
+          </div>
+
           {/* Üst Özet Kartları (3'lü KPI) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl border-l-4 border-l-indigo-500">
@@ -3029,14 +3109,19 @@ export default function CreditCardsPage() {
 
           {/* Abonelikler ve Tekrarlayan Harcamalar Tablosu */}
           <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+            <div className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900/90">
               <div className="flex items-center gap-2">
                 <Repeat className="w-4 h-4 text-indigo-400" />
                 <h3 className="font-bold text-sm text-white">Tespit Edilen Düzenli Abonelikler & Sabit Giderler</h3>
               </div>
-              <span className="text-xs text-slate-400 font-mono">
-                {recurringAnalysis.items.length} Düzenli Kalem
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-mono text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20">
+                  {searchAllPeriods || selectedPeriod === 'ALL' ? 'Tüm Dönemler' : showLiveOnly ? 'Canlı Fişler' : (activePeriodData?.displayDate || selectedPeriod || 'Tüm Dönemler')}
+                </span>
+                <span className="text-xs text-slate-400 font-mono">
+                  {recurringAnalysis.items.length} Düzenli Kalem
+                </span>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
