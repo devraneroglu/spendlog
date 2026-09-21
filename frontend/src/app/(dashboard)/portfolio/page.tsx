@@ -249,6 +249,7 @@ export default function PortfolioPage() {
   const [currency, setCurrency] = useState<Currency>(Currency.TRY);
   const [quantity, setQuantity] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
+  const [purchaseCommission, setPurchaseCommission] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
   const [platform, setPlatform] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
@@ -259,6 +260,7 @@ export default function PortfolioPage() {
   const [isSellModalOpen, setIsSellModalOpen] = useState(false);
   const [sellingItem, setSellingItem] = useState<PortfolioItem | null>(null);
   const [salePrice, setSalePrice] = useState('');
+  const [saleCommission, setSaleCommission] = useState('');
   const [saleDate, setSaleDate] = useState(formatLocalDateToInput());
   const [saleNote, setSaleNote] = useState('');
   const [isSelling, setIsSelling] = useState(false);
@@ -674,6 +676,7 @@ export default function PortfolioPage() {
     setCurrency(Currency.TRY);
     setQuantity('');
     setPurchasePrice('');
+    setPurchaseCommission('');
     setCurrentPrice('');
     setPlatform(customPlatforms[0] || 'Midas');
     setTargetPrice('');
@@ -689,6 +692,7 @@ export default function PortfolioPage() {
     setCurrency(it.currency);
     setQuantity(it.quantity.toString());
     setPurchasePrice(it.purchasePrice.toString());
+    setPurchaseCommission(it.purchaseCommission ? it.purchaseCommission.toString() : '');
     setCurrentPrice(it.currentPrice.toString());
     setPlatform(it.platform || customPlatforms[0] || '');
     setTargetPrice(it.targetPrice ? it.targetPrice.toString() : '');
@@ -699,6 +703,7 @@ export default function PortfolioPage() {
   const openSellModal = (it: PortfolioItem) => {
     setSellingItem(it);
     setSalePrice(it.currentPrice > 0 ? it.currentPrice.toString() : it.purchasePrice.toString());
+    setSaleCommission('');
     setSaleDate(formatLocalDateToInput());
     setSaleNote('Kısmi/Tam Satış Gerçekleşti');
     setIsSellModalOpen(true);
@@ -720,11 +725,13 @@ export default function PortfolioPage() {
           quantity: parseFloat(quantity) || 0,
           purchasePrice: parseFloat(purchasePrice) || 0,
           currentPrice: parseFloat(currentPrice) || parseFloat(purchasePrice) || 0,
+          purchaseCommission: parseFloat(purchaseCommission) || 0,
           purchaseDate: formattedPurchaseDate,
           platform,
           notes: editingItem.notes,
           targetPrice: targetPrice ? parseFloat(targetPrice) : null,
         });
+        toast.success(`"${symbol}" varlığı başarıyla güncellendi.`);
       } else {
         await api.post('/api/portfolio', {
           symbol,
@@ -734,15 +741,18 @@ export default function PortfolioPage() {
           quantity: parseFloat(quantity) || 0,
           purchasePrice: parseFloat(purchasePrice) || 0,
           currentPrice: parseFloat(purchasePrice) || 0,
+          purchaseCommission: parseFloat(purchaseCommission) || 0,
           purchaseDate: formattedPurchaseDate,
           platform,
           targetPrice: targetPrice ? parseFloat(targetPrice) : null,
         });
+        toast.success(`"${symbol}" varlığı portföye eklendi.`);
       }
       setIsModalOpen(false);
-      fetchPortfolioData();
-    } catch (err) {
+      await fetchPortfolioData();
+    } catch (err: any) {
       console.error('Failed to save portfolio item', err);
+      toast.error('Varlık kaydedilirken hata oluştu: ' + (err.response?.data?.detail || err.message));
     } finally {
       setIsSaving(false);
     }
@@ -758,15 +768,37 @@ export default function PortfolioPage() {
         id: sellingItem.id,
         salePrice: parseFloat(salePrice) || 0,
         saleDate: new Date(saleDate).toISOString(),
+        saleCommission: parseFloat(saleCommission) || 0,
         notes: saleNote,
       });
       setIsSellModalOpen(false);
-      fetchPortfolioData();
-    } catch (err) {
+      await fetchPortfolioData();
+      toast.success(`"${sellingItem.symbol}" satışı başarıyla kaydedildi.`);
+    } catch (err: any) {
       console.error('Failed to sell portfolio item', err);
+      toast.error('Satış işlemi kaydedilirken hata oluştu: ' + (err.response?.data?.detail || err.message));
     } finally {
       setIsSelling(false);
     }
+  };
+
+  const handleUndoSale = (it: PortfolioItem) => {
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Satışı Geri Al',
+      message: `"${it.symbol}" varlığının satış işlemini geri alıp, tekrar aktif portföye aktarmak istediğinize emin misiniz?`,
+      onConfirm: async () => {
+        try {
+          await api.post(`/api/portfolio/${it.id}/undo-sale`);
+          toast.success(`"${it.symbol}" satışı geri alındı ve aktif portföye aktarıldı.`);
+          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+          await fetchPortfolioData();
+        } catch (err: any) {
+          console.error('Failed to undo portfolio sale', err);
+          toast.error('Satış geri alınırken hata oluştu: ' + (err.response?.data?.detail || err.message));
+        }
+      },
+    });
   };
 
   const handleDeleteItem = (id: number, symbol: string) => {
@@ -2069,6 +2101,11 @@ export default function PortfolioPage() {
                           </td>
                           <td className="py-2 px-3 text-right text-slate-300 font-mono font-semibold whitespace-nowrap">
                             {it.cost.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
+                            {it.purchaseCommission > 0 && (
+                              <span className="text-[10px] text-slate-500 block font-normal" title={`Alış Komisyonu: ${it.purchaseCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}>
+                                +{it.purchaseCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kom.
+                              </span>
+                            )}
                           </td>
                           <td className="py-2 px-3 text-right font-bold text-white font-mono whitespace-nowrap">
                             {(it.salePrice || it.currentPrice).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}
@@ -2077,6 +2114,11 @@ export default function PortfolioPage() {
                             {isValuesHidden
                               ? '***'
                               : `${it.currentValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}
+                            {!it.isActive && it.saleCommission != null && it.saleCommission > 0 && (
+                              <span className="text-[10px] text-amber-500/80 block font-normal" title={`Satış Komisyonu: ${it.saleCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${sym}`}>
+                                -{it.saleCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kom.
+                              </span>
+                            )}
                           </td>
                           <td className={`py-2 px-3 text-right font-bold whitespace-nowrap ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                             {isValuesHidden ? (
@@ -2122,13 +2164,21 @@ export default function PortfolioPage() {
                                 </button>
                               )}
 
-                              {it.isActive && (
+                              {it.isActive ? (
                                 <button
                                   onClick={() => openSellModal(it)}
                                   className="p-1 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition cursor-pointer"
                                   title="Satış Yap"
                                 >
                                   <Tag className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleUndoSale(it)}
+                                  className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition cursor-pointer"
+                                  title="Satışı Geri Al (Aktif Portföye Döndür)"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
                                 </button>
                               )}
 
@@ -2981,7 +3031,7 @@ export default function PortfolioPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Alış Fiyatı ({selectedCurrencySymbol})
+                    Birim Alış Fiyatı ({selectedCurrencySymbol})
                   </label>
                   <input
                     type="number"
@@ -2992,6 +3042,33 @@ export default function PortfolioPage() {
                     placeholder={`150.00 ${selectedCurrencySymbol}`}
                     className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                   />
+                </div>
+              </div>
+
+              {/* Alış Komisyonu & Dinamik Toplam Maliyet */}
+              <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3 space-y-2">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      Alış Komisyonu ({selectedCurrencySymbol})
+                    </label>
+                    <span className="text-[10px] text-slate-500">Opsiyonel / Borsa veya Aracı Kurum</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="any"
+                    value={purchaseCommission}
+                    onChange={(e) => setPurchaseCommission(e.target.value)}
+                    placeholder={`0.00 ${selectedCurrencySymbol}`}
+                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 text-xs">
+                  <span className="text-slate-400">Hesaplanan Toplam Maliyet:</span>
+                  <span className="font-mono font-bold text-indigo-300 text-sm">
+                    {((parseFloat(quantity) || 0) * (parseFloat(purchasePrice) || 0) + (parseFloat(purchaseCommission) || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {selectedCurrencySymbol}
+                  </span>
                 </div>
               </div>
 
@@ -3283,10 +3360,15 @@ export default function PortfolioPage() {
                   <span className="font-bold text-white text-sm">{sellingItem.quantity} Adet</span>
                 </div>
                 <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-500 block">Alış Maliyeti</span>
+                  <span className="text-[10px] text-slate-500 block">Toplam Alış Maliyeti</span>
                   <span className="font-bold text-slate-300 text-sm">
-                    {sellingItem.purchasePrice.toFixed(2)} {CURRENCY_SYMBOLS[sellingItem.currency] || '₺'}
+                    {sellingItem.cost.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {CURRENCY_SYMBOLS[sellingItem.currency] || '₺'}
                   </span>
+                  {sellingItem.purchaseCommission > 0 && (
+                    <span className="text-[9px] text-slate-500 block">
+                      ({sellingItem.purchaseCommission.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {CURRENCY_SYMBOLS[sellingItem.currency] || '₺'} alış kom.)
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -3304,6 +3386,62 @@ export default function PortfolioPage() {
                   className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
                 />
               </div>
+
+              {/* Satış Komisyonu */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    Satış Komisyonu ({CURRENCY_SYMBOLS[sellingItem.currency] || '₺'})
+                  </label>
+                  <span className="text-[10px] text-slate-500">Opsiyonel / Borsa veya Aracı Kurum</span>
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  value={saleCommission}
+                  onChange={(e) => setSaleCommission(e.target.value)}
+                  placeholder={`0.00 ${CURRENCY_SYMBOLS[sellingItem.currency] || '₺'}`}
+                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                />
+              </div>
+
+              {/* Canlı Realize K/Z ve Net Ele Geçecek Tutar */}
+              {(() => {
+                const sym = CURRENCY_SYMBOLS[sellingItem.currency] || '₺';
+                const sPrice = parseFloat(salePrice) || 0;
+                const sComm = parseFloat(saleCommission) || 0;
+                const grossSale = sellingItem.quantity * sPrice;
+                const netProceeds = grossSale - sComm;
+                const totalCost = sellingItem.cost;
+                const realizedPL = netProceeds - totalCost;
+                const realizedPLPct = totalCost > 0 ? (realizedPL / totalCost) * 100 : 0;
+                const isProfitable = realizedPL >= 0;
+
+                return (
+                  <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3.5 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>Brüt Satış Tutarı:</span>
+                      <span className="font-mono text-slate-200 font-semibold">{grossSale.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}</span>
+                    </div>
+                    {sComm > 0 && (
+                      <div className="flex items-center justify-between text-amber-400/90">
+                        <span>Satış Komisyonu:</span>
+                        <span className="font-mono font-semibold">-{sComm.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-slate-300 font-medium">
+                      <span>Net Ele Geçecek Tutar:</span>
+                      <span className="font-mono text-white font-bold">{netProceeds.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                      <span className="text-slate-300 font-semibold">Net Realize K/Z:</span>
+                      <span className={`font-mono font-bold text-sm ${isProfitable ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {isProfitable ? '+' : ''}{realizedPL.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {sym} ({isProfitable ? '+' : ''}{realizedPLPct.toFixed(2)}%)
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">

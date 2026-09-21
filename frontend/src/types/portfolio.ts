@@ -20,6 +20,9 @@ export interface PortfolioItem {
   currentValue: number;
   profitLoss: number;
   profitLossPercent: number;
+  purchaseCommission: number;
+  saleCommission?: number | null;
+  netSaleValue?: number | null;
 }
 
 export interface PortfolioSummary {

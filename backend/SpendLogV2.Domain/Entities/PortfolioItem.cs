@@ -12,6 +12,8 @@ public class PortfolioItem : BaseEntity
     public decimal Quantity { get; set; }
     public decimal PurchasePrice { get; set; }
     public decimal CurrentPrice { get; set; }
+    public decimal PurchaseCommission { get; set; } = 0;
+    public decimal? SaleCommission { get; set; }
     public DateTime PurchaseDate { get; set; } = DateTime.UtcNow;
     public string? Platform { get; set; }
     public string? Notes { get; set; }
@@ -20,8 +22,9 @@ public class PortfolioItem : BaseEntity
     public decimal? SalePrice { get; set; }
     public DateTime? SaleDate { get; set; }
 
-    public decimal Cost => Quantity * PurchasePrice;
-    public decimal CurrentValue => Quantity * (!IsActive && SalePrice.HasValue ? SalePrice.Value : CurrentPrice);
+    public decimal Cost => (Quantity * PurchasePrice) + PurchaseCommission;
+    public decimal NetSaleValue => !IsActive && SalePrice.HasValue ? (Quantity * SalePrice.Value) - (SaleCommission ?? 0) : CurrentValue;
+    public decimal CurrentValue => !IsActive && SalePrice.HasValue ? (Quantity * SalePrice.Value) - (SaleCommission ?? 0) : Quantity * CurrentPrice;
     public decimal ProfitLoss => CurrentValue - Cost;
     public decimal ProfitLossPercent => Cost > 0 ? (ProfitLoss / Cost) * 100 : 0;
 }

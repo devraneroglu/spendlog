@@ -77,6 +77,13 @@ public class PortfolioController : ControllerBase
         return result ? Ok(new { success = true }) : NotFound();
     }
 
+    [HttpPost("{id}/undo-sale")]
+    public async Task<ActionResult> UndoSale(int id)
+    {
+        var result = await _mediator.Send(new UndoPortfolioSaleCommand(id));
+        return result ? Ok(new { success = true }) : NotFound();
+    }
+
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteItem(int id)
     {

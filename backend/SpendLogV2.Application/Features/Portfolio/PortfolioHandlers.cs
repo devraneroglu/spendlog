@@ -30,7 +30,10 @@ public record PortfolioItemDto(
     decimal Cost,
     decimal CurrentValue,
     decimal ProfitLoss,
-    decimal ProfitLossPercent);
+    decimal ProfitLossPercent,
+    decimal PurchaseCommission = 0,
+    decimal? SaleCommission = null,
+    decimal? NetSaleValue = null);
 
 public record PortfolioSummaryDto(
     decimal TotalCostTRY,
@@ -115,7 +118,10 @@ public class GetPortfolioItemsQueryHandler : IRequestHandler<GetPortfolioItemsQu
             p.Cost,
             p.CurrentValue,
             p.ProfitLoss,
-            p.ProfitLossPercent)).ToList();
+            p.ProfitLossPercent,
+            p.PurchaseCommission,
+            p.SaleCommission,
+            p.NetSaleValue)).ToList();
     }
 }
 
@@ -319,7 +325,8 @@ public record CreatePortfolioItemCommand(
     DateTime PurchaseDate,
     string? Platform,
     string? Notes,
-    decimal? TargetPrice) : IRequest<PortfolioItemDto>;
+    decimal? TargetPrice,
+    decimal PurchaseCommission = 0) : IRequest<PortfolioItemDto>;
 
 public class CreatePortfolioItemCommandHandler : IRequestHandler<CreatePortfolioItemCommand, PortfolioItemDto>
 {
@@ -341,6 +348,7 @@ public class CreatePortfolioItemCommandHandler : IRequestHandler<CreatePortfolio
             Quantity = request.Quantity,
             PurchasePrice = request.PurchasePrice,
             CurrentPrice = request.CurrentPrice > 0 ? request.CurrentPrice : request.PurchasePrice,
+            PurchaseCommission = request.PurchaseCommission,
             PurchaseDate = request.PurchaseDate,
             Platform = request.Platform,
             Notes = request.Notes,
@@ -370,7 +378,10 @@ public class CreatePortfolioItemCommandHandler : IRequestHandler<CreatePortfolio
             item.Cost,
             item.CurrentValue,
             item.ProfitLoss,
-            item.ProfitLossPercent);
+            item.ProfitLossPercent,
+            item.PurchaseCommission,
+            item.SaleCommission,
+            item.NetSaleValue);
     }
 }
 
@@ -386,7 +397,8 @@ public record UpdatePortfolioItemCommand(
     DateTime PurchaseDate,
     string? Platform,
     string? Notes,
-    decimal? TargetPrice) : IRequest<bool>;
+    decimal? TargetPrice,
+    decimal PurchaseCommission = 0) : IRequest<bool>;
 
 public class UpdatePortfolioItemCommandHandler : IRequestHandler<UpdatePortfolioItemCommand, bool>
 {
@@ -409,6 +421,7 @@ public class UpdatePortfolioItemCommandHandler : IRequestHandler<UpdatePortfolio
         item.Quantity = request.Quantity;
         item.PurchasePrice = request.PurchasePrice;
         if (request.CurrentPrice > 0) item.CurrentPrice = request.CurrentPrice;
+        item.PurchaseCommission = request.PurchaseCommission;
         item.PurchaseDate = request.PurchaseDate;
         item.Platform = request.Platform;
         item.Notes = request.Notes;
@@ -727,7 +740,10 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
             p.Cost,
             p.CurrentValue,
             p.ProfitLoss,
-            p.ProfitLossPercent)).ToList();
+            p.ProfitLossPercent,
+            p.PurchaseCommission,
+            p.SaleCommission,
+            p.NetSaleValue)).ToList();
 
         return new BatchUpdatePortfolioResultDto(
             true,
@@ -1017,7 +1033,8 @@ public record SellPortfolioItemCommand(
     int Id,
     decimal SalePrice,
     DateTime SaleDate,
-    string? Notes) : IRequest<bool>;
+    string? Notes,
+    decimal? SaleCommission = null) : IRequest<bool>;
 
 public class SellPortfolioItemCommandHandler : IRequestHandler<SellPortfolioItemCommand, bool>
 {
@@ -1035,12 +1052,39 @@ public class SellPortfolioItemCommandHandler : IRequestHandler<SellPortfolioItem
 
         item.SalePrice = request.SalePrice;
         item.SaleDate = request.SaleDate;
+        item.SaleCommission = request.SaleCommission;
         item.CurrentPrice = request.SalePrice;
         item.IsActive = false;
         if (!string.IsNullOrWhiteSpace(request.Notes))
         {
             item.Notes = string.IsNullOrWhiteSpace(item.Notes) ? request.Notes : $"{item.Notes} | {request.Notes}";
         }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+}
+
+public record UndoPortfolioSaleCommand(int Id) : IRequest<bool>;
+
+public class UndoPortfolioSaleCommandHandler : IRequestHandler<UndoPortfolioSaleCommand, bool>
+{
+    private readonly IAppDbContext _context;
+
+    public UndoPortfolioSaleCommandHandler(IAppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<bool> Handle(UndoPortfolioSaleCommand request, CancellationToken cancellationToken)
+    {
+        var item = await _context.PortfolioItems.FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken);
+        if (item == null) return false;
+
+        item.IsActive = true;
+        item.SalePrice = null;
+        item.SaleDate = null;
+        item.SaleCommission = null;
 
         await _context.SaveChangesAsync(cancellationToken);
         return true;
@@ -1130,7 +1174,9 @@ public record BulkImportPortfolioItemDto(
     string? Notes,
     bool IsActive = true,
     decimal? SalePrice = null,
-    DateTime? SaleDate = null);
+    DateTime? SaleDate = null,
+    decimal PurchaseCommission = 0,
+    decimal? SaleCommission = null);
 
 public record BulkImportPortfolioCommand(List<BulkImportPortfolioItemDto> Items) : IRequest<int>;
 
@@ -1156,12 +1202,14 @@ public class BulkImportPortfolioCommandHandler : IRequestHandler<BulkImportPortf
             Quantity = r.Quantity,
             PurchasePrice = r.PurchasePrice,
             CurrentPrice = r.CurrentPrice.HasValue && r.CurrentPrice.Value > 0 ? r.CurrentPrice.Value : r.PurchasePrice,
+            PurchaseCommission = r.PurchaseCommission,
             PurchaseDate = r.PurchaseDate,
             Platform = r.Platform?.Trim(),
             Notes = r.Notes?.Trim(),
             IsActive = r.IsActive,
             SalePrice = r.IsActive ? null : r.SalePrice,
-            SaleDate = r.IsActive ? null : r.SaleDate
+            SaleDate = r.IsActive ? null : r.SaleDate,
+            SaleCommission = r.IsActive ? null : r.SaleCommission
         }).ToList();
 
         _context.PortfolioItems.AddRange(entities);

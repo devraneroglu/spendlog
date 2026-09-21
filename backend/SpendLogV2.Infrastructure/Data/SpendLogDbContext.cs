@@ -135,6 +135,8 @@ public class SpendLogDbContext : IdentityDbContext<AppUser>, IAppDbContext
         builder.Entity<PortfolioItem>().Property(p => p.CurrentPrice).HasColumnType("decimal(18,8)");
         builder.Entity<PortfolioItem>().Property(p => p.TargetPrice).HasColumnType("decimal(18,8)");
         builder.Entity<PortfolioItem>().Property(p => p.SalePrice).HasColumnType("decimal(18,8)");
+        builder.Entity<PortfolioItem>().Property(p => p.PurchaseCommission).HasColumnType("decimal(18,2)");
+        builder.Entity<PortfolioItem>().Property(p => p.SaleCommission).HasColumnType("decimal(18,2)");
 
         // PortfolioSnapshot
         builder.Entity<PortfolioSnapshot>().Property(s => s.TotalValueTRY).HasColumnType("decimal(18,2)");
