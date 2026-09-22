@@ -94,10 +94,11 @@ export default function SchedulerPage() {
   const [savedBackupUrlStatus, setSavedBackupUrlStatus] = useState<Record<string, boolean>>({});
   const [expandedSummary, setExpandedSummary] = useState<Record<string, boolean>>({});
 
-  const fetchSchedulerStatus = async () => {
+  const fetchSchedulerStatus = async (isRetry: boolean = false) => {
+    const actualRetry = typeof isRetry === 'boolean' ? isRetry : false;
     try {
-      setIsLoading(true);
-      const res = await axios.get(`${SCRAPER_BASE_URL}/api/scheduler/status`);
+      if (!actualRetry) setIsLoading(true);
+      const res = await axios.get(`${SCRAPER_BASE_URL}/api/scheduler/status`, { timeout: 8000 });
       const fetchedJobs = res.data.jobs || {};
       setJobs(fetchedJobs);
       setMetrics(res.data.metrics || null);
@@ -118,6 +119,13 @@ export default function SchedulerPage() {
       setTargetUrls(urls);
       setBackupUrls(bUrls);
     } catch (err) {
+      if (!isRetry) {
+        // 1.5 sn sonra tek seferlik sessiz yeniden deneme (warm-up / geçici ağ gecikmesi koruması)
+        setTimeout(() => {
+          fetchSchedulerStatus(true);
+        }, 1500);
+        return;
+      }
       console.error('Failed to fetch scheduler status', err);
       toast.error('Kazıyıcı servis durumu alınamadı. Backend servisini kontrol edin.');
     } finally {
@@ -331,7 +339,7 @@ export default function SchedulerPage() {
               <span>{isTriggeringAll ? 'Kazınıyor...' : 'Tümünü Şimdi Çalıştır'}</span>
             </button>
             <button
-              onClick={fetchSchedulerStatus}
+              onClick={() => fetchSchedulerStatus()}
               className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2 rounded-xl border border-slate-700 transition cursor-pointer"
             >
               <RefreshCw className="w-4 h-4 text-indigo-400" />

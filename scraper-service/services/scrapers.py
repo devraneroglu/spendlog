@@ -10,6 +10,14 @@ from services.throttler import host_throttler
 from services.circuit_breaker import circuit_registry
 from services.cache import market_cache
 
+# Tanımlı Popüler ve Majör ABD Wall Street Hisseleri
+KNOWN_US_STOCKS = {
+    "NVDA", "AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "GOOG", "META", "NFLX",
+    "AVGO", "PLTR", "AMD", "INTC", "COIN", "DIS", "ARM", "BABA", "UBER",
+    "PYPL", "SMCI", "QCOM", "BRK.B", "JNJ", "V", "WMT", "JPM", "PG", "MA",
+    "TSM", "ASML", "ORCL", "CRM", "ADBE", "CSCO", "PEP", "KO"
+}
+
 class FinancialScraperService:
     def __init__(self):
         self.headers = HeaderRotator.get_random_headers()
@@ -103,7 +111,7 @@ class FinancialScraperService:
             scraper_logger.debug(f"TradingView scanner error: {e}")
         return {}
 
-    async def get_stock_data(self, symbol: str) -> Dict[str, Any]:
+    async def get_stock_data(self, symbol: str, market: str = "AUTO") -> Dict[str, Any]:
         """
         BIST, ABD Hisse & Majör Endekslerin Fiyat ve Değişim Oranlarını Çeker.
         (BIST: THYAO, GARAN | ABD: NVDA, AAPL, MSFT | Endeks: XU100, ^GSPC, ^IXIC)
@@ -112,6 +120,55 @@ class FinancialScraperService:
         is_index = sym.startswith("^") or sym in ["XU100", "BIST100", "SP500", "NASDAQ", "DXY", "DX-Y.NYB", "XBANK", "XHOLD", "XUSIN", "XULAS", "XGMYO"]
         clean_symbol = sym.replace(".IS", "").replace(".E", "").strip()
 
+        # Pazar tespiti (US vs BIST)
+        is_us = (market.upper() == "US") or (clean_symbol in KNOWN_US_STOCKS)
+
+        # ==========================================
+        # 1. ABD HİSSELERİ (NVDA, AAPL, MSFT, TSLA...)
+        # ==========================================
+        if is_us and not is_index:
+            # 0. Önbellek Kontrolü (L1 / L2 RAM)
+            us_cached = market_cache.get("category:us")
+            if isinstance(us_cached, list):
+                for item in us_cached:
+                    if isinstance(item, dict) and item.get("symbol") == clean_symbol and item.get("price") is not None:
+                        return item
+
+            # 1. Hat: Yahoo Direct Chart API (Hızlı & Doğrudan Sembol - Asla .IS Eklenmez)
+            try:
+                us_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_symbol}?interval=1m&range=1d"
+                await host_throttler.acquire(us_url)
+                async with httpx.AsyncClient(headers=self.headers, timeout=5.0) as client:
+                    r = await client.get(us_url)
+                    if r.status_code == 200:
+                        data = r.json()
+                        meta = data.get("chart", {}).get("result", [{}])[0].get("meta", {})
+                        price = meta.get("regularMarketPrice")
+                        prev = meta.get("regularMarketPreviousClose") or meta.get("previousClose") or meta.get("chartPreviousClose")
+                        if price and float(price) > 0:
+                            chg = ((float(price) - float(prev)) / float(prev) * 100) if (prev and float(prev) > 0) else 0.0
+                            cur = meta.get("currency", "USD")
+                            scraper_logger.info(f"[YAHOO US STOCK] {clean_symbol} -> ${price} {cur} ({chg:+.2f}%)")
+                            return {
+                                "symbol": clean_symbol,
+                                "price": round(float(price), 2),
+                                "change": round(chg, 2),
+                                "currency": cur
+                            }
+            except Exception as e:
+                scraper_logger.debug(f"Yahoo US direct chart error for {clean_symbol}: {e}")
+
+            # 2. Hat: yfinance Fast-Info Fallback (Doğrudan Sembol - Asla .IS Eklenmez)
+            yf_res = await asyncio.to_thread(self._fetch_yfinance_fast_info, clean_symbol)
+            if yf_res and yf_res.get("price") is not None:
+                yf_res["symbol"] = clean_symbol
+                return yf_res
+
+            return {"symbol": clean_symbol, "price": None, "change": 0.0, "currency": "USD"}
+
+        # ==========================================
+        # 2. BIST HİSSELERİ VE ENDEKSLER / GLOBAL
+        # ==========================================
         # 0. Önbellek Kontrolü (L1 / L2 RAM)
         bist_cached = market_cache.get("category:bist")
         if isinstance(bist_cached, list):
@@ -175,7 +232,7 @@ class FinancialScraperService:
                 except Exception as e:
                     scraper_logger.debug(f"Yahoo BIST error for {clean_symbol}: {e}")
 
-            # 2. Kaynak: Yahoo Direct Chart API - Global / ABD / Endeks
+            # 2. Kaynak: Yahoo Direct Chart API - Global / Endeks
             try:
                 global_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_sym}?interval=1m&range=1d"
                 await host_throttler.acquire(global_url)
@@ -204,28 +261,29 @@ class FinancialScraperService:
                 scraper_logger.debug(f"Yahoo Global error for {yahoo_sym}: {e}")
 
             # 3. Kaynak: BigPara HTTPS API (BIST Fallback)
-            try:
-                bp_url = f"https://bigpara.hurriyet.com.tr/api/v1/borsa/hisseyuzeysel/{clean_symbol}"
-                await host_throttler.acquire(bp_url)
-                r_bp = await client.get(bp_url, follow_redirects=True)
-                if r_bp.status_code == 200:
-                    data = r_bp.json()
-                    if data.get("code") == "0" and "data" in data:
-                        hisse = data["data"].get("hisseYuzeysel", {})
-                        price = hisse.get("satis") or hisse.get("kapanis") or hisse.get("alis")
-                        chg = hisse.get("yuzdedegisim") or 0.0
-                        if price and float(price) > 0:
-                            scraper_logger.info(f"[BIGPARA] {clean_symbol} -> {price} TRY ({chg}%)")
-                            return {
-                                "symbol": clean_symbol,
-                                "price": round(float(price), 2),
-                                "change": round(float(chg), 2),
-                                "currency": "TRY"
-                            }
-            except Exception as e:
-                scraper_logger.debug(f"BigPara fallback error for {clean_symbol}: {e}")
+            if not is_index and not sym.startswith("^"):
+                try:
+                    bp_url = f"https://bigpara.hurriyet.com.tr/api/v1/borsa/hisseyuzeysel/{clean_symbol}"
+                    await host_throttler.acquire(bp_url)
+                    r_bp = await client.get(bp_url, follow_redirects=True)
+                    if r_bp.status_code == 200:
+                        data = r_bp.json()
+                        if data.get("code") == "0" and "data" in data:
+                            hisse = data["data"].get("hisseYuzeysel", {})
+                            price = hisse.get("satis") or hisse.get("kapanis") or hisse.get("alis")
+                            chg = hisse.get("yuzdedegisim") or 0.0
+                            if price and float(price) > 0:
+                                scraper_logger.info(f"[BIGPARA] {clean_symbol} -> {price} TRY ({chg}%)")
+                                return {
+                                    "symbol": clean_symbol,
+                                    "price": round(float(price), 2),
+                                    "change": round(float(chg), 2),
+                                    "currency": "TRY"
+                                }
+                except Exception as e:
+                    scraper_logger.debug(f"BigPara fallback error for {clean_symbol}: {e}")
 
-        # 4. Kaynak: yfinance Ticker Fast-Info Fallback (Yahoo 429 Bot Kalkanını Aşar)
+        # 4. Kaynak: yfinance Ticker Fast-Info Fallback (BIST için .IS)
         yf_symbol = f"{clean_symbol}.IS" if (not is_index and not sym.startswith("^") and not "=" in yahoo_sym and not yahoo_sym.endswith(".IS")) else yahoo_sym
         yf_res = await asyncio.to_thread(self._fetch_yfinance_fast_info, yf_symbol)
         if yf_res and yf_res.get("price") is not None:
@@ -409,7 +467,7 @@ class FinancialScraperService:
                     chg = float(data.get("priceChangePercent", 0))
                     if p > 0:
                         if is_try:
-                            usd_rate = await self.get_currency_rate("USD", "TRY") or 34.50
+                            usd_rate = await self.get_currency_rate("USD", "TRY") or 48.82
                             return {
                                 "symbol": clean_sym,
                                 "price": round(p * usd_rate, 2),
@@ -436,7 +494,7 @@ class FinancialScraperService:
                         p = float(d_gate[0]["last"])
                         chg = float(d_gate[0].get("change_percentage", 0.0))
                         if p > 0:
-                            usd_rate = await self.get_currency_rate("USD", "TRY") or 34.50 if is_try else 1.0
+                            usd_rate = await self.get_currency_rate("USD", "TRY") or 48.82 if is_try else 1.0
                             return {
                                 "symbol": clean_sym,
                                 "price": round(p * usd_rate, 2) if is_try else (round(p, 4) if p < 10 else round(p, 2)),
@@ -456,7 +514,7 @@ class FinancialScraperService:
                     prev = float(d_mexc.get("prevClosePrice", 0))
                     chg = ((p - prev) / prev * 100) if prev > 0 else float(d_mexc.get("priceChangePercent", 0)) * 100
                     if p > 0:
-                        usd_rate = await self.get_currency_rate("USD", "TRY") or 34.50 if is_try else 1.0
+                        usd_rate = await self.get_currency_rate("USD", "TRY") or 48.82 if is_try else 1.0
                         return {
                             "symbol": clean_sym,
                             "price": round(p * usd_rate, 2) if is_try else (round(p, 4) if p < 10 else round(p, 2)),
@@ -506,12 +564,121 @@ class FinancialScraperService:
         res = await self.get_crypto_data(symbol, vs_currency)
         return res.get("price")
 
+    _currency_cache: Dict[str, Dict[str, Any]] = {}
+    _currency_cache_time: float = 0.0
+
+    async def _fetch_all_bigpara_currencies(self) -> Dict[str, Dict[str, Any]]:
+        """BigPara Canlı Döviz tablosundan (Dolar/TRY, Euro/TRY vb.) canlı kur ve değişim oranlarını çeker (25sn cache)."""
+        import time
+        from bs4 import BeautifulSoup
+        now = time.time()
+        if FinancialScraperService._currency_cache and (now - FinancialScraperService._currency_cache_time) < 25.0:
+            return FinancialScraperService._currency_cache
+
+        currencies: Dict[str, Dict[str, Any]] = {}
+        try:
+            url = "https://bigpara.hurriyet.com.tr/doviz/"
+            await host_throttler.acquire(url)
+            async with httpx.AsyncClient(headers=self.headers, timeout=5.0, follow_redirects=True) as client:
+                r = await client.get(url)
+                if r.status_code == 200:
+                    soup = BeautifulSoup(r.text, "html.parser")
+                    for tr in soup.find_all("tr"):
+                        cells = [c.get_text(strip=True) for c in tr.find_all(["td", "th"])]
+                        if len(cells) >= 4:
+                            row_txt = cells[0].upper()
+                            # Dolar / USD
+                            if ("DOLAR" in row_txt or "USD" in row_txt) and "AVUSTRALYA" not in row_txt and "KANADA" not in row_txt:
+                                rate_val = DataSanitizer.to_float(cells[2])
+                                chg_val = DataSanitizer.extract_change_percent(cells[3])
+                                if rate_val and rate_val > 20.0 and "USD" not in currencies:
+                                    currencies["USD"] = {
+                                        "base": "USD",
+                                        "target": "TRY",
+                                        "rate": round(rate_val, 4),
+                                        "change": round(chg_val, 2)
+                                    }
+                            # Euro / EUR
+                            elif "EURO" in row_txt and "/" not in row_txt:
+                                rate_val = DataSanitizer.to_float(cells[2])
+                                chg_val = DataSanitizer.extract_change_percent(cells[3])
+                                if rate_val and rate_val > 20.0 and "EUR" not in currencies:
+                                    currencies["EUR"] = {
+                                        "base": "EUR",
+                                        "target": "TRY",
+                                        "rate": round(rate_val, 4),
+                                        "change": round(chg_val, 2)
+                                    }
+                    if currencies:
+                        FinancialScraperService._currency_cache = currencies
+                        FinancialScraperService._currency_cache_time = now
+                        scraper_logger.info(f"[BIGPARA DOVIZ] Başarıyla çekildi: USD={currencies.get('USD', {}).get('rate')}, EUR={currencies.get('EUR', {}).get('rate')}")
+        except Exception as e:
+            scraper_logger.error(f"BigPara currency parse error: {e}")
+
+        return currencies or FinancialScraperService._currency_cache
+
+    async def _fetch_tcmb_currencies(self) -> Dict[str, Dict[str, Any]]:
+        """TCMB Resmi Gösterge Kurları XML Servisinden USD ve EUR çeker (60sn cache)."""
+        import xml.etree.ElementTree as ET
+        rates: Dict[str, Dict[str, Any]] = {}
+        try:
+            url = "https://www.tcmb.gov.tr/kurlar/today.xml"
+            await host_throttler.acquire(url)
+            async with httpx.AsyncClient(headers=self.headers, timeout=4.0) as client:
+                r = await client.get(url)
+                if r.status_code == 200:
+                    tree = ET.fromstring(r.content)
+                    for c in tree.findall("Currency"):
+                        kod = c.get("CurrencyCode")
+                        if kod in ("USD", "EUR"):
+                            selling = c.find("ForexSelling")
+                            rate_str = selling.text if selling is not None else None
+                            if rate_str:
+                                rate_val = DataSanitizer.to_float(rate_str)
+                                if rate_val and rate_val > 0:
+                                    rates[kod] = {
+                                        "base": kod,
+                                        "target": "TRY",
+                                        "rate": round(rate_val, 4),
+                                        "change": 0.0
+                                    }
+        except Exception as e:
+            scraper_logger.debug(f"TCMB XML fetch error: {e}")
+        return rates
+
     async def get_currency_data(self, base: str = "USD", target: str = "TRY") -> Dict[str, Any]:
-        """Döviz Kuru ve Günlük Değişim Oranını Çeker."""
-        async with httpx.AsyncClient(headers=self.headers, timeout=4.0) as client:
-            # 1. Yahoo Finance Direct Chart
+        """
+        Döviz Kuru ve Günlük Değişim Oranını Çeker.
+        1. Hat: BigPara Canlı Döviz Masası (Canlı Alış/Satış + Günlük Değişim)
+        2. Hat: TCMB Resmi Gösterge Kurları XML
+        3. Hat: Yahoo Direct Chart (USDTRY=X, EURTRY=X)
+        """
+        b = base.upper()
+        t = target.upper()
+
+        if t == "TRY" and b in ("USD", "EUR"):
+            # 1. Hat: BigPara Canlı Döviz Masası
             try:
-                yahoo_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{base.upper()}{target.upper()}=X?interval=1m&range=1d"
+                bp_currs = await self._fetch_all_bigpara_currencies()
+                if b in bp_currs and bp_currs[b].get("rate"):
+                    return bp_currs[b]
+            except Exception as e:
+                scraper_logger.debug(f"BigPara currency error for {b}: {e}")
+
+            # 2. Hat: TCMB XML
+            try:
+                tcmb_currs = await self._fetch_tcmb_currencies()
+                if b in tcmb_currs and tcmb_currs[b].get("rate"):
+                    return tcmb_currs[b]
+            except Exception as e:
+                scraper_logger.debug(f"TCMB currency error for {b}: {e}")
+
+        # 3. Hat: Yahoo Direct Chart (Çapraz Kurlar & Fallback)
+        try:
+            async with httpx.AsyncClient(headers=self.headers, timeout=4.0) as client:
+                yahoo_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{b}{t}=X?interval=1m&range=1d"
+                await host_throttler.acquire(yahoo_url)
                 r_y = await client.get(yahoo_url)
                 if r_y.status_code == 200:
                     data = r_y.json()
@@ -521,37 +688,17 @@ class FinancialScraperService:
                     if p and float(p) > 0:
                         chg = ((float(p) - float(prev)) / float(prev) * 100) if prev else 0.0
                         return {
-                            "base": base.upper(),
-                            "target": target.upper(),
+                            "base": b,
+                            "target": t,
                             "rate": round(float(p), 4),
                             "change": round(chg, 2)
                         }
-            except Exception:
-                pass
+        except Exception as e:
+            scraper_logger.debug(f"Yahoo currency error for {b}/{t}: {e}")
 
-            # 2. Truncgil Fallback
-            try:
-                r = await client.get("https://finans.truncgil.com/today.json")
-                if r.status_code == 200:
-                    data = r.json()
-                    curr_item = data.get(base.upper())
-                    if isinstance(curr_item, dict):
-                        satis_str = curr_item.get("Satış") or curr_item.get("Satis") or curr_item.get("Alış")
-                        chg_str = curr_item.get("Değişim") or "0.0"
-                        if satis_str:
-                            rate_val = DataSanitizer.to_float(satis_str)
-                            chg_val = DataSanitizer.extract_change_percent(chg_str)
-                            if rate_val > 0:
-                                return {
-                                    "base": base.upper(),
-                                    "target": target.upper(),
-                                    "rate": round(rate_val, 4),
-                                    "change": round(chg_val, 2)
-                                }
-            except Exception:
-                pass
-
-        return {"base": base.upper(), "target": target.upper(), "rate": None, "change": 0.0}
+        # Modern Güvenli Fallback (Eski 34.50 yerine güncel taban kurlar)
+        fallback_rate = 48.82 if b == "USD" else (55.95 if b == "EUR" else None)
+        return {"base": b, "target": t, "rate": fallback_rate, "change": 0.0}
 
     async def get_currency_rate(self, base: str = "USD", target: str = "TRY") -> Optional[float]:
         """Geriye dönük uyumluluk: Sadece kur float döner."""

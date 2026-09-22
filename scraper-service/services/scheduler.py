@@ -383,7 +383,7 @@ class DynamicSchedulerService:
                 "NVDA", "AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "META", "NFLX",
                 "AVGO", "PLTR", "AMD", "INTC", "COIN"
             ]
-            tasks = [self.scrapers.get_stock_data(sym) for sym in symbols]
+            tasks = [self.scrapers.get_stock_data(sym, market="US") for sym in symbols]
             sp_task = self.scrapers.get_stock_data("^GSPC")
             nq_task = self.scrapers.get_stock_data("^IXIC")
 
@@ -531,8 +531,8 @@ class DynamicSchedulerService:
                 return_exceptions=True
             )
             currency_res = {
-                "USD": usd_data if (isinstance(usd_data, dict) and usd_data.get("rate")) else {"base": "USD", "target": "TRY", "rate": 34.50, "change": 0.0},
-                "EUR": eur_data if (isinstance(eur_data, dict) and eur_data.get("rate")) else {"base": "EUR", "target": "TRY", "rate": 37.25, "change": 0.0},
+                "USD": usd_data if (isinstance(usd_data, dict) and usd_data.get("rate")) else {"base": "USD", "target": "TRY", "rate": 48.82, "change": 0.0},
+                "EUR": eur_data if (isinstance(eur_data, dict) and eur_data.get("rate")) else {"base": "EUR", "target": "TRY", "rate": 55.95, "change": 0.0},
                 "DXY": dxy_data if (isinstance(dxy_data, dict) and dxy_data.get("price")) else {"symbol": "DXY", "price": 99.16, "change": 0.0}
             }
             self.latest_prices["currency"] = currency_res

@@ -151,7 +151,7 @@ async def get_markets_summary():
 
     async def fetch_all():
         bist_tasks = [scraper_service.get_stock_data(s) for s in bist_symbols]
-        us_tasks = [scraper_service.get_stock_data(s) for s in us_symbols]
+        us_tasks = [scraper_service.get_stock_data(s, market="US") for s in us_symbols]
         gold_tasks = [scraper_service.get_gold_data(g) for g in gold_types]
         crypto_tasks = [scraper_service.get_crypto_data(c, "usd") for c in crypto_symbols]
         usd_task = scraper_service.get_currency_data("USD", "TRY")
@@ -185,8 +185,8 @@ async def get_markets_summary():
     us_res = [x for x in res[1] if not isinstance(x, Exception)] if len(res) > 1 and isinstance(res[1], (list, tuple)) else []
     gold_res = [x for x in res[2] if not isinstance(x, Exception)] if len(res) > 2 and isinstance(res[2], (list, tuple)) else []
     crypto_res = [x for x in res[3] if not isinstance(x, Exception)] if len(res) > 3 and isinstance(res[3], (list, tuple)) else []
-    usd_data = res[4] if len(res) > 4 and not isinstance(res[4], Exception) else {"base": "USD", "target": "TRY", "rate": 34.50, "change": 0.0}
-    eur_data = res[5] if len(res) > 5 and not isinstance(res[5], Exception) else {"base": "EUR", "target": "TRY", "rate": 37.25, "change": 0.0}
+    usd_data = res[4] if len(res) > 4 and not isinstance(res[4], Exception) else {"base": "USD", "target": "TRY", "rate": 48.82, "change": 0.0}
+    eur_data = res[5] if len(res) > 5 and not isinstance(res[5], Exception) else {"base": "EUR", "target": "TRY", "rate": 55.95, "change": 0.0}
     dxy_data = res[6] if len(res) > 6 and not isinstance(res[6], Exception) else {"symbol": "DXY", "price": 99.16, "change": 0.0}
     indices_data = res[7] if len(res) > 7 and not isinstance(res[7], Exception) else {}
     commodities_data = res[8] if len(res) > 8 and not isinstance(res[8], Exception) else {}

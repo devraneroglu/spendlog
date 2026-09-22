@@ -192,8 +192,8 @@ class HybridMarketCache:
         curr = self.get("category:currency") or {}
         usd_item = curr.get("USD")
         if isinstance(usd_item, dict):
-            return float(usd_item.get("rate") or 34.50)
-        return float(usd_item or 34.50)
+            return float(usd_item.get("rate") or 48.82)
+        return float(usd_item or 48.82)
 
     def get_asset_price(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
@@ -219,13 +219,13 @@ class HybridMarketCache:
         if raw in ["USD", "USDTRY", "USD/TRY", "DOLAR"] or norm in ["USD", "USDTRY", "DOLAR"]:
             curr = self.get("category:currency") or {}
             usd = curr.get("USD")
-            rate = usd.get("rate", 34.50) if isinstance(usd, dict) else (usd or 34.50)
+            rate = usd.get("rate", 48.82) if isinstance(usd, dict) else (usd or 48.82)
             chg = usd.get("change", 0.0) if isinstance(usd, dict) else 0.0
             return {"symbol": raw, "price": rate, "change": chg, "currency": "TRY"}
         if raw in ["EUR", "EURTRY", "EUR/TRY", "EURO"] or norm in ["EUR", "EURTRY", "EURO"]:
             curr = self.get("category:currency") or {}
             eur = curr.get("EUR")
-            rate = eur.get("rate", 37.25) if isinstance(eur, dict) else (eur or 37.25)
+            rate = eur.get("rate", 55.95) if isinstance(eur, dict) else (eur or 55.95)
             chg = eur.get("change", 0.0) if isinstance(eur, dict) else 0.0
             return {"symbol": raw, "price": rate, "change": chg, "currency": "TRY"}
 

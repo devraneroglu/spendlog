@@ -331,10 +331,10 @@ export default function MarketsPage() {
   const [centralBanks, setCentralBanks] = useState<any>(INITIAL_CENTRAL_BANKS);
   const [cryptoSentiment, setCryptoSentiment] = useState<any>(INITIAL_CRYPTO_SENTIMENT);
   const [currencyRates, setCurrencyRates] = useState<any>({
-    USD: 34.50,
-    EUR: 37.25,
-    usdChange: 0.03,
-    eurChange: -0.12,
+    USD: 48.82,
+    EUR: 55.95,
+    usdChange: 0.05,
+    eurChange: -0.02,
     dxy: 99.16,
     dxyChange: 0.25,
   });
@@ -516,8 +516,8 @@ export default function MarketsPage() {
           let updatedRates = currencyRates;
           if (data.currency) {
             updatedRates = {
-              USD: data.currency.USD?.rate || 34.50,
-              EUR: data.currency.EUR?.rate || 37.25,
+              USD: data.currency.USD?.rate || 48.82,
+              EUR: data.currency.EUR?.rate || 55.95,
               usdChange: data.currency.USD?.change || 0.0,
               eurChange: data.currency.EUR?.change || 0.0,
               dxy: data.currency.DXY?.price || 99.16,
@@ -688,8 +688,8 @@ export default function MarketsPage() {
       let newRates = currencyRates;
       if (usdRate.status === 'fulfilled' || eurRate.status === 'fulfilled' || dxyRes.status === 'fulfilled') {
         newRates = {
-          USD: usdRate.status === 'fulfilled' ? usdRate.value.data.rate || 34.50 : 34.50,
-          EUR: eurRate.status === 'fulfilled' ? eurRate.value.data.rate || 37.25 : 37.25,
+          USD: usdRate.status === 'fulfilled' ? usdRate.value.data.rate || 48.82 : 48.82,
+          EUR: eurRate.status === 'fulfilled' ? eurRate.value.data.rate || 55.95 : 55.95,
           usdChange: usdRate.status === 'fulfilled' ? usdRate.value.data.change || 0.0 : 0.0,
           eurChange: eurRate.status === 'fulfilled' ? eurRate.value.data.change || 0.0 : 0.0,
           dxy: dxyRes.status === 'fulfilled' ? dxyRes.value.data.price || 99.16 : 99.16,
@@ -1059,7 +1059,7 @@ export default function MarketsPage() {
               <span className="text-slate-300 font-medium">USD / TRY</span>
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="font-bold text-white text-[11px]">
-                  {isValuesHidden ? '***' : `${currencyRates.USD?.toFixed(2) || '34.50'} ₺`}
+                  {isValuesHidden ? '***' : `${currencyRates.USD?.toFixed(2) || '48.82'} ₺`}
                 </span>
                 <ChangeBadge change={currencyRates.usdChange} className="!text-[10px] !px-1.5 !py-0" />
               </div>
@@ -1068,7 +1068,7 @@ export default function MarketsPage() {
               <span className="text-slate-300 font-medium">EUR / TRY</span>
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="font-bold text-white text-[11px]">
-                  {isValuesHidden ? '***' : `${currencyRates.EUR?.toFixed(2) || '37.25'} ₺`}
+                  {isValuesHidden ? '***' : `${currencyRates.EUR?.toFixed(2) || '55.95'} ₺`}
                 </span>
                 <ChangeBadge change={currencyRates.eurChange} className="!text-[10px] !px-1.5 !py-0" />
               </div>
