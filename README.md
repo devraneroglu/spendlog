@@ -165,7 +165,7 @@ docker compose up -d --build
 Konteynerler hazır olduğunda:
 * 🌐 **Web Arayüzü (Frontend):** `http://localhost:3000`
 * 🔌 **Backend API (.NET 10):** `http://localhost:5007`
-* 🕷️ **Scraper & PDF Docs (FastAPI):** `http://localhost:8000/docs`
+* 🕷️ **Scraper & PDF Docs (FastAPI):** `http://localhost:5008/docs`
 
 ### 🔑 Varsayılan Hazır Test Hesabı
 Veritabanı otomatik migrate edilir ve ilk açılışta hazır yönetici hesabı tohumlanır:
@@ -205,7 +205,7 @@ python -m venv venv
 source venv/bin/activate
 
 pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 5008 --reload
 ```
 
 ### 4. Frontend Web (Next.js 16)

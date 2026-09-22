@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
-import { api } from '@/lib/axios';
+import { api, SCRAPER_BASE_URL } from '@/lib/axios';
 import { useAuthStore } from '@/store/auth-store';
 import { Account, Transaction, TransactionType } from '@/types/finance';
 import { PortfolioSummary, PortfolioItem } from '@/types/portfolio';
@@ -78,10 +78,10 @@ export default function DashboardPage() {
   const fetchLiveMarketRates = async (fallbackUsd: number) => {
     try {
       const [usdRes, eurRes, goldRes, btcRes] = await Promise.allSettled([
-        axios.get('http://localhost:8000/api/prices/currency?base=USD&target=TRY', { timeout: 2500 }),
-        axios.get('http://localhost:8000/api/prices/currency?base=EUR&target=TRY', { timeout: 2500 }),
-        axios.get('http://localhost:8000/api/prices/gold?type=gram-altin', { timeout: 2500 }),
-        axios.get('http://localhost:8000/api/prices/crypto?symbol=BTC&vs=usd', { timeout: 2500 }),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/currency?base=USD&target=TRY`, { timeout: 2500 }),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/currency?base=EUR&target=TRY`, { timeout: 2500 }),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/gold?type=gram-altin`, { timeout: 2500 }),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/crypto?symbol=BTC&vs=usd`, { timeout: 2500 }),
       ]);
 
       const liveUsd = usdRes.status === 'fulfilled' && usdRes.value.data?.rate ? usdRes.value.data.rate : fallbackUsd;

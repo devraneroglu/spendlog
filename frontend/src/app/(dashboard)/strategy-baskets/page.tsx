@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
-import { api } from '@/lib/axios';
+import { api, SCRAPER_BASE_URL } from '@/lib/axios';
 import { useAuthStore } from '@/store/auth-store';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -141,7 +141,7 @@ export default function StrategyBasketsPage() {
   useEffect(() => {
     // Canlı USD kuru al
     axios
-      .get('http://localhost:8000/api/prices/currency?base=USD&target=TRY', { timeout: 3000 })
+      .get(`${SCRAPER_BASE_URL}/api/prices/currency?base=USD&target=TRY`, { timeout: 3000 })
       .then((r) => {
         if (r.data?.rate) setUsdRate(r.data.rate);
       })
@@ -245,7 +245,7 @@ export default function StrategyBasketsPage() {
       if (isCrypto) {
         const isTry = itemCurrency === Currency.TRY || cleanSym.includes('/TL') || cleanSym.includes('/TRY');
         const vs = isTry ? 'try' : 'usd';
-        const r = await axios.get(`http://localhost:8000/api/prices/crypto?symbol=${cleanSym}&vs=${vs}`, { timeout: 3500 });
+        const r = await axios.get(`${SCRAPER_BASE_URL}/api/prices/crypto?symbol=${cleanSym}&vs=${vs}`, { timeout: 3500 });
         if (r.data?.price && r.data.price > 0) {
           setItemCurrentPrice(r.data.price.toString());
           toast.success(`${cleanSym} canlı fiyatı getirildi: ${r.data.price} ${isTry ? '₺' : '$'}`);
@@ -263,7 +263,7 @@ export default function StrategyBasketsPage() {
         else if (cleanSym.includes('ONS')) goldType = 'ons-altin';
         else if (cleanSym.includes('BILEZIK')) goldType = '22-ayar-bilezik';
 
-        const r = await axios.get(`http://localhost:8000/api/prices/gold?type=${goldType}`, { timeout: 3500 });
+        const r = await axios.get(`${SCRAPER_BASE_URL}/api/prices/gold?type=${goldType}`, { timeout: 3500 });
         if (r.data?.price && r.data.price > 0) {
           setItemCurrentPrice(r.data.price.toString());
           setItemCurrency(goldType === 'ons-altin' ? Currency.USD : Currency.TRY);
@@ -274,7 +274,7 @@ export default function StrategyBasketsPage() {
       }
 
       // Stock / ETF
-      const r = await axios.get(`http://localhost:8000/api/prices/stock?symbol=${cleanSym}`, { timeout: 3500 });
+      const r = await axios.get(`${SCRAPER_BASE_URL}/api/prices/stock?symbol=${cleanSym}`, { timeout: 3500 });
       if (r.data?.price && r.data.price > 0) {
         setItemCurrentPrice(r.data.price.toString());
         toast.success(`${cleanSym} canlı fiyatı getirildi: ${r.data.price}`);

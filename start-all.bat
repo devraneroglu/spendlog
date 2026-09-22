@@ -18,8 +18,8 @@ start "SpendLog API (5007)" cmd /k "cd /d ""%~dp0backend\SpendLogV2.API"" && set
 
 ping 127.0.0.1 -n 3 >nul
 
-echo [2/3] Starting Scraper Service (FastAPI - Port: 8000)...
-start "SpendLog Scraper (8000)" cmd /k "cd /d ""%~dp0scraper-service"" && if exist .\venv\Scripts\activate (call .\venv\Scripts\activate) && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+echo [2/3] Starting Scraper Service (FastAPI - Port: 5008)...
+start "SpendLog Scraper (5008)" cmd /k "cd /d ""%~dp0scraper-service"" && if exist .\venv\Scripts\activate (call .\venv\Scripts\activate) && python -m uvicorn main:app --host 0.0.0.0 --port 5008 --reload"
 
 ping 127.0.0.1 -n 3 >nul
 
@@ -32,7 +32,7 @@ echo ALL SERVICES STARTED SUCCESSFULLY!
 echo.
 echo   Frontend : http://localhost:3000
 echo   Backend  : http://localhost:5007/swagger
-echo   Scraper  : http://localhost:8000/docs
+echo   Scraper  : http://localhost:5008/docs
 echo ================================================================
 echo.
 echo You can run 'stop-all.bat' to stop all services.

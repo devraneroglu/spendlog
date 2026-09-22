@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5007';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5007';
+export const SCRAPER_BASE_URL = process.env.NEXT_PUBLIC_SCRAPER_URL || 'http://localhost:5008';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

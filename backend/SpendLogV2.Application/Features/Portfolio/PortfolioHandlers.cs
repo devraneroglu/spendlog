@@ -860,7 +860,7 @@ public class BatchUpdatePortfolioPricesCommandHandler : IRequestHandler<BatchUpd
         {
             try
             {
-                var pythonBaseUrl = _configuration["PythonService:BaseUrl"] ?? "http://localhost:8000";
+                var pythonBaseUrl = _configuration["PythonService:BaseUrl"] ?? "http://localhost:5008";
                 var payload = new { symbols = stillMissing.Any() ? stillMissing : activeSymbols, include_usd_rate = true };
                 var response = await _httpClient.PostAsJsonAsync($"{pythonBaseUrl}/api/prices/portfolio-lookup", payload, cancellationToken);
 

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Header } from '@/components/layout/Header';
-import { api } from '@/lib/axios';
+import { api, SCRAPER_BASE_URL } from '@/lib/axios';
 import { useAuthStore } from '@/store/auth-store';
 import { formatShortDateTime } from '@/lib/date-utils';
 import axios from 'axios';
@@ -385,7 +385,7 @@ export default function MarketsPage() {
 
       // 1. Strateji: Tek ve Hızlı Özet Çağrısı (/api/prices/summary)
       try {
-        const summaryRes = await axios.get('http://localhost:8000/api/prices/summary', { timeout: 12000 });
+        const summaryRes = await axios.get(`${SCRAPER_BASE_URL}/api/prices/summary`, { timeout: 12000 });
         if (summaryRes.status === 200 && summaryRes.data) {
           const data = summaryRes.data;
 
@@ -417,7 +417,7 @@ export default function MarketsPage() {
           if (missingStockAndCryptoSymbols.length > 0) {
             try {
               const lookupRes = await axios.post(
-                'http://localhost:8000/api/prices/portfolio-lookup',
+                `${SCRAPER_BASE_URL}/api/prices/portfolio-lookup`,
                 {
                   symbols: Array.from(new Set(missingStockAndCryptoSymbols)),
                   include_usd_rate: false,
@@ -440,7 +440,7 @@ export default function MarketsPage() {
             await Promise.allSettled(
               missingGoldTypes.map(async (g) => {
                 try {
-                  const gRes = await axios.get(`http://localhost:8000/api/prices/gold?type=${g.type}`, { timeout: 5000 });
+                  const gRes = await axios.get(`${SCRAPER_BASE_URL}/api/prices/gold?type=${g.type}`, { timeout: 5000 });
                   if (gRes.data) {
                     summaryGoldMap.set(g.type.toLowerCase(), gRes.data);
                   }
@@ -623,18 +623,18 @@ export default function MarketsPage() {
       const cryptos = currentConfig.crypto.map((c) => c.symbol);
 
       const [stockResults, usResults, goldResults, cryptoResults, usdRate, eurRate, dxyRes, indicesRes, commoditiesRes, bondsRes, cryptoSentimentRes, centralBanksRes] = await Promise.allSettled([
-        Promise.all(bistSymbols.map(async (s) => (await axios.get(`http://localhost:8000/api/prices/stock?symbol=${s}`)).data)),
-        Promise.all(usSymbols.map(async (s) => (await axios.get(`http://localhost:8000/api/prices/stock?symbol=${s}`)).data)),
-        Promise.all(goldTypes.map(async (g) => (await axios.get(`http://localhost:8000/api/prices/gold?type=${g}`)).data)),
-        Promise.all(cryptos.map(async (c) => (await axios.get(`http://localhost:8000/api/prices/crypto?symbol=${c}&vs=usd`)).data)),
-        axios.get('http://localhost:8000/api/prices/currency?base=USD&target=TRY'),
-        axios.get('http://localhost:8000/api/prices/currency?base=EUR&target=TRY'),
-        axios.get('http://localhost:8000/api/prices/stock?symbol=DXY'),
-        axios.get('http://localhost:8000/api/prices/indices'),
-        axios.get('http://localhost:8000/api/prices/commodities'),
-        axios.get('http://localhost:8000/api/prices/bonds'),
-        axios.get('http://localhost:8000/api/prices/crypto-sentiment'),
-        axios.get('http://localhost:8000/api/prices/central-banks'),
+        Promise.all(bistSymbols.map(async (s) => (await axios.get(`${SCRAPER_BASE_URL}/api/prices/stock?symbol=${s}`)).data)),
+        Promise.all(usSymbols.map(async (s) => (await axios.get(`${SCRAPER_BASE_URL}/api/prices/stock?symbol=${s}`)).data)),
+        Promise.all(goldTypes.map(async (g) => (await axios.get(`${SCRAPER_BASE_URL}/api/prices/gold?type=${g}`)).data)),
+        Promise.all(cryptos.map(async (c) => (await axios.get(`${SCRAPER_BASE_URL}/api/prices/crypto?symbol=${c}&vs=usd`)).data)),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/currency?base=USD&target=TRY`),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/currency?base=EUR&target=TRY`),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/stock?symbol=DXY`),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/indices`),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/commodities`),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/bonds`),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/crypto-sentiment`),
+        axios.get(`${SCRAPER_BASE_URL}/api/prices/central-banks`),
       ]);
 
       let newStocks = bistStocksRef.current;

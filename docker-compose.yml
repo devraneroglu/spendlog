@@ -55,7 +55,7 @@ services:
     container_name: spendlog-scraper
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "5008:5008"
     environment:
       - REDIS_HOST=spendlog-redis
       - REDIS_PORT=6379
@@ -78,7 +78,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Server=spendlog-db,1433;Database=SpendLogV2Db;User Id=sa;Password=${MSSQL_SA_PASSWORD:-SpendLog2026!StrongPass};TrustServerCertificate=True;
       - Redis__ConnectionString=spendlog-redis:6379,abortConnect=false,connectTimeout=2000
-      - PythonService__BaseUrl=http://spendlog-scraper:8000
+      - PythonService__BaseUrl=http://spendlog-scraper:5008
       - Telegram__BotToken=${TELEGRAM_BOT_TOKEN:-YOUR_TELEGRAM_BOT_TOKEN_HERE}
       - Jwt__SecretKey=${JWT_SECRET_KEY:-SpendLog_Default_Development_Secret_Key_Minimum_32_Chars!}
       - Jwt__Issuer=SpendLogV2API
@@ -105,7 +105,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:5007
-      - NEXT_PUBLIC_SCRAPER_URL=http://localhost:8000
+      - NEXT_PUBLIC_SCRAPER_URL=http://localhost:5008
     depends_on:
       - spendlog-api
 

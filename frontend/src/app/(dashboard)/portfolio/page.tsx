@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
-import { api } from '@/lib/axios';
+import { api, SCRAPER_BASE_URL } from '@/lib/axios';
 import axios from 'axios';
 import { PortfolioItem, PortfolioSummary, PortfolioDistribution, PortfolioSnapshot, PriceAlert, PriceAlertCondition } from '@/types/portfolio';
 import { AssetType, Currency } from '@/types/finance';
@@ -597,7 +597,7 @@ export default function PortfolioPage() {
       // 1. Hızlı Toplu Önbellek Çağrısı (POST /api/prices/portfolio-lookup)
       try {
         const lookupRes = await axios.post(
-          'http://localhost:8000/api/prices/portfolio-lookup',
+          `${SCRAPER_BASE_URL}/api/prices/portfolio-lookup`,
           { symbols: uniqueSymbols, include_usd_rate: true },
           { timeout: 8000 }
         );
@@ -724,7 +724,7 @@ export default function PortfolioPage() {
     fetchPortfolioData(liveRate);
 
     // 2. Ardından arka planda sessizce canlı kuru güncelle
-    axios.get('http://localhost:8000/api/prices/currency?base=USD&target=TRY', { timeout: 2000 })
+    axios.get(`${SCRAPER_BASE_URL}/api/prices/currency?base=USD&target=TRY`, { timeout: 2000 })
       .then((usdRes) => {
         if (usdRes.data?.rate && usdRes.data.rate > 0 && Math.abs(usdRes.data.rate - liveRate) > 0.05) {
           setUsdRate(usdRes.data.rate);

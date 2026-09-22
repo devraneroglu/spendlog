@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
-import { api } from '@/lib/axios';
+import { api, SCRAPER_BASE_URL } from '@/lib/axios';
 import { CreditCardExpense, PeriodSummary, ParsedPdfResult, ParsedExpenseItem } from '@/types/credit-card';
 import { Account, Category, AccountType } from '@/types/finance';
 import { useAuthStore } from '@/store/auth-store';
@@ -1374,7 +1374,7 @@ export default function CreditCardsPage() {
     formData.append('bank_type', 'ziraat');
 
     try {
-      const res = await axios.post<ParsedPdfResult>('http://localhost:8000/api/pdf/parse', formData, {
+      const res = await axios.post<ParsedPdfResult>(`${SCRAPER_BASE_URL}/api/pdf/parse`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       

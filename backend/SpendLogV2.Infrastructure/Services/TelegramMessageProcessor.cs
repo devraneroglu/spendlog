@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SpendLogV2.Domain.Entities;
 using SpendLogV2.Domain.Enums;
@@ -15,13 +16,15 @@ public class TelegramMessageProcessor : ITelegramMessageProcessor
 {
     private readonly SpendLogDbContext _context;
     private readonly ILogger<TelegramMessageProcessor> _logger;
+    private readonly string _pythonBaseUrl;
     private static readonly DateTime _startTime = DateTime.UtcNow;
     private const string StandardHelpMessage = "💡 Bakiye için `/bakiye`, yakıt için `/yakit`, kredi kartı için `/kk`, sistem kontrolü için `/durum` yazabilirsiniz.";
 
-    public TelegramMessageProcessor(SpendLogDbContext context, ILogger<TelegramMessageProcessor> logger)
+    public TelegramMessageProcessor(SpendLogDbContext context, ILogger<TelegramMessageProcessor> logger, IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
+        _pythonBaseUrl = configuration["PythonService:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5008";
     }
 
     public async Task ProcessUpdateAsync(ITelegramBotClient botClient, Update update, AppUser? resolvedUser = null, CancellationToken cancellationToken = default)
@@ -208,11 +211,16 @@ public class TelegramMessageProcessor : ITelegramMessageProcessor
             var memBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
             var memMb = memBytes / (1024 * 1024);
 
-            string scraperStatus = "🟢 Aktif (8000)";
+            int scraperPort = 5008;
+            if (Uri.TryCreate(_pythonBaseUrl, UriKind.Absolute, out var parsedUri))
+            {
+                scraperPort = parsedUri.Port;
+            }
+            string scraperStatus = $"🟢 Aktif ({scraperPort})";
             try
             {
                 using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-                var scraperRes = await httpClient.GetAsync("http://localhost:8000/docs", cancellationToken);
+                var scraperRes = await httpClient.GetAsync($"{_pythonBaseUrl}/docs", cancellationToken);
                 if (!scraperRes.IsSuccessStatusCode)
                 {
                     scraperStatus = "🟡 Yanıt Vermiyor";
@@ -532,7 +540,7 @@ public class TelegramMessageProcessor : ITelegramMessageProcessor
                 using var content = new MultipartFormDataContent();
                 content.Add(new ByteArrayContent(imageBytes), "file", "receipt.jpg");
 
-                var response = await httpClient.PostAsync("http://localhost:8000/api/receipts/parse-fuel-receipt", content, cancellationToken);
+                var response = await httpClient.PostAsync($"{_pythonBaseUrl}/api/receipts/parse-fuel-receipt", content, cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
                     var jsonString = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -848,7 +856,7 @@ public class TelegramMessageProcessor : ITelegramMessageProcessor
             byte[]? chartBytes = null;
             try
             {
-                var chartResponse = await httpClient.PostAsJsonAsync("http://localhost:8000/api/reports/monthly-chart", payload, cancellationToken);
+                var chartResponse = await httpClient.PostAsJsonAsync($"{_pythonBaseUrl}/api/reports/monthly-chart", payload, cancellationToken);
                 if (chartResponse.IsSuccessStatusCode)
                 {
                     chartBytes = await chartResponse.Content.ReadAsByteArrayAsync(cancellationToken);
@@ -863,7 +871,7 @@ public class TelegramMessageProcessor : ITelegramMessageProcessor
             byte[]? pdfBytes = null;
             try
             {
-                var pdfResponse = await httpClient.PostAsJsonAsync("http://localhost:8000/api/reports/monthly-pdf", payload, cancellationToken);
+                var pdfResponse = await httpClient.PostAsJsonAsync($"{_pythonBaseUrl}/api/reports/monthly-pdf", payload, cancellationToken);
                 if (pdfResponse.IsSuccessStatusCode)
                 {
                     pdfBytes = await pdfResponse.Content.ReadAsByteArrayAsync(cancellationToken);

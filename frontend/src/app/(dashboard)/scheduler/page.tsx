@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { useToast } from '@/components/ui/Toast';
 import { useAuthStore } from '@/store/auth-store';
 import { useRouter } from 'next/navigation';
+import { SCRAPER_BASE_URL } from '@/lib/axios';
 import axios from 'axios';
 import {
   Cpu,
@@ -96,7 +97,7 @@ export default function SchedulerPage() {
   const fetchSchedulerStatus = async () => {
     try {
       setIsLoading(true);
-      const res = await axios.get('http://localhost:8000/api/scheduler/status');
+      const res = await axios.get(`${SCRAPER_BASE_URL}/api/scheduler/status`);
       const fetchedJobs = res.data.jobs || {};
       setJobs(fetchedJobs);
       setMetrics(res.data.metrics || null);
@@ -136,7 +137,7 @@ export default function SchedulerPage() {
     try {
       setTogglingJob(jobKey);
       const nextEnabled = !currentEnabled;
-      await axios.post('http://localhost:8000/api/scheduler/toggle', {
+      await axios.post(`${SCRAPER_BASE_URL}/api/scheduler/toggle`, {
         job_key: jobKey,
         is_enabled: nextEnabled,
       });
@@ -165,7 +166,7 @@ export default function SchedulerPage() {
   const handleUpdateCron = async (jobKey: string, cronVal?: string) => {
     try {
       const cron = cronVal || editingCron[jobKey];
-      await axios.post('http://localhost:8000/api/scheduler/update-cron', {
+      await axios.post(`${SCRAPER_BASE_URL}/api/scheduler/update-cron`, {
         job_key: jobKey,
         cron_expression: cron,
       });
@@ -183,7 +184,7 @@ export default function SchedulerPage() {
       localStorage.setItem(`spendlog_scraper_url_${jobKey}`, url);
     }
     try {
-      await axios.post('http://localhost:8000/api/scheduler/update-url', {
+      await axios.post(`${SCRAPER_BASE_URL}/api/scheduler/update-url`, {
         job_key: jobKey,
         target_url: url,
       });
@@ -203,7 +204,7 @@ export default function SchedulerPage() {
       localStorage.setItem(`spendlog_scraper_backup_url_${jobKey}`, bUrl);
     }
     try {
-      await axios.post('http://localhost:8000/api/scheduler/update-backup-url', {
+      await axios.post(`${SCRAPER_BASE_URL}/api/scheduler/update-backup-url`, {
         job_key: jobKey,
         target_url: bUrl,
       });
@@ -220,7 +221,7 @@ export default function SchedulerPage() {
   const handleTriggerNow = async (jobKey: string) => {
     try {
       setTriggeringJob(jobKey);
-      await axios.post('http://localhost:8000/api/scheduler/trigger-now', {
+      await axios.post(`${SCRAPER_BASE_URL}/api/scheduler/trigger-now`, {
         job_key: jobKey,
       });
       toast.success(`${jobKey} kazıma görevi başarıyla tetiklendi.`, 'Kazıma Başlatıldı');
@@ -237,7 +238,7 @@ export default function SchedulerPage() {
   const handleTriggerAll = async () => {
     try {
       setIsTriggeringAll(true);
-      const res = await axios.post('http://localhost:8000/api/scheduler/trigger-all');
+      const res = await axios.post(`${SCRAPER_BASE_URL}/api/scheduler/trigger-all`);
       toast.success(res.data?.message || 'Tüm aktif kazıyıcılar tetiklendi.', 'Toplu Senkronizasyon');
       setTimeout(() => {
         fetchSchedulerStatus();
