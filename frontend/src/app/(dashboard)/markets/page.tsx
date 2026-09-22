@@ -144,29 +144,29 @@ const INITIAL_US_STOCKS = [
 ];
 
 const INITIAL_INDICES = {
-  XU100: { symbol: 'XU100', name: 'BIST 100', price: 14012.42, change: 0.57 },
-  SP500: { symbol: '^GSPC', name: 'S&P 500', price: 7718.60, change: -0.38 },
-  NASDAQ: { symbol: '^IXIC', name: 'NASDAQ', price: 26506.99, change: -0.29 },
+  XU100: { symbol: 'XU100', name: 'BIST 100', price: null, change: null },
+  SP500: { symbol: '^GSPC', name: 'S&P 500', price: null, change: null },
+  NASDAQ: { symbol: '^IXIC', name: 'NASDAQ', price: null, change: null },
   sectors: {
-    XBANK: { symbol: 'XBANK', name: 'Banka', price: 16653.08, change: 0.25 },
-    XHOLD: { symbol: 'XHOLD', name: 'Holding', price: 14461.68, change: 0.36 },
-    XUSIN: { symbol: 'XUSIN', name: 'Sınai', price: 19470.92, change: 1.25 },
-    XULAS: { symbol: 'XULAS', name: 'Ulaştırma', price: 36081.85, change: -0.81 },
-    XGMYO: { symbol: 'XGMYO', name: 'GYO', price: 6126.32, change: -1.21 },
+    XBANK: { symbol: 'XBANK', name: 'Banka', price: null, change: null },
+    XHOLD: { symbol: 'XHOLD', name: 'Holding', price: null, change: null },
+    XUSIN: { symbol: 'XUSIN', name: 'Sınai', price: null, change: null },
+    XULAS: { symbol: 'XULAS', name: 'Ulaştırma', price: null, change: null },
+    XGMYO: { symbol: 'XGMYO', name: 'GYO', price: null, change: null },
   },
 };
 
 const INITIAL_COMMODITIES = {
-  brent: { symbol: 'BZ=F', name: 'Brent Petrol', price: 95.83, change: 0.32, currency: 'USD' },
-  crude: { symbol: 'CL=F', name: 'Ham Petrol (WTI)', price: 91.22, change: -0.09, currency: 'USD' },
-  gold: { symbol: 'GC=F', name: 'XAU / USD', price: 4477.20, change: -1.38, currency: 'USD' },
-  silver: { symbol: 'SI=F', name: 'XAG / USD', price: 66.82, change: -1.31, currency: 'USD' },
-  vix: { symbol: '^VIX', name: 'VIX (Korku Endeksi)', price: 14.53, change: 1.47, currency: 'USD' },
+  brent: { symbol: 'BZ=F', name: 'Brent Petrol', price: null, change: null, currency: 'USD' },
+  crude: { symbol: 'CL=F', name: 'Ham Petrol (WTI)', price: null, change: null, currency: 'USD' },
+  gold: { symbol: 'GC=F', name: 'XAU / USD', price: null, change: null, currency: 'USD' },
+  silver: { symbol: 'SI=F', name: 'XAG / USD', price: null, change: null, currency: 'USD' },
+  vix: { symbol: '^VIX', name: 'VIX (Korku Endeksi)', price: null, change: null, currency: 'USD' },
 };
 
 const INITIAL_BONDS = {
-  us10y: { symbol: '^TNX', name: 'US10Y', price: 4.78, change: 0.46, currency: 'USD' },
-  us2y: { symbol: '2YY=F', name: 'US2Y', price: 3.96, change: -4.09, currency: 'USD' },
+  us10y: { symbol: '^TNX', name: 'US10Y', price: null, change: null, currency: 'USD' },
+  us2y: { symbol: '2YY=F', name: 'US2Y', price: null, change: null, currency: 'USD' },
 };
 
 const INITIAL_CENTRAL_BANKS = {
@@ -593,22 +593,25 @@ export default function MarketsPage() {
           setLastSyncTime(now);
 
           if (typeof window !== 'undefined') {
-            localStorage.setItem(
-              'spendlog_market_cache',
-              JSON.stringify({
-                stocks: updatedBist,
-                usStocks: updatedUs,
-                golds: updatedGold,
-                cryptos: updatedCrypto,
-                rates: updatedRates,
-                indices: updatedIndices,
-                commodities: updatedCommodities,
-                bonds: updatedBonds,
-                cryptoSentiment: updatedCryptoSentiment,
-                centralBanks: updatedCentralBanks,
-                syncTime: now,
-              })
-            );
+            try {
+              localStorage.removeItem('spendlog_market_cache');
+              localStorage.setItem(
+                'spendlog_market_cache_v3',
+                JSON.stringify({
+                  stocks: updatedBist,
+                  usStocks: updatedUs,
+                  golds: updatedGold,
+                  cryptos: updatedCrypto,
+                  rates: updatedRates,
+                  indices: updatedIndices,
+                  commodities: updatedCommodities,
+                  bonds: updatedBonds,
+                  cryptoSentiment: updatedCryptoSentiment,
+                  centralBanks: updatedCentralBanks,
+                  syncTime: now,
+                })
+              );
+            } catch (_) {}
           }
           return;
         }
@@ -765,25 +768,28 @@ export default function MarketsPage() {
       setLastSyncTime(now);
 
       if (typeof window !== 'undefined') {
-        localStorage.setItem(
-          'spendlog_market_cache',
-          JSON.stringify({
-            stocks: newStocks,
-            usStocks: newUsStocks,
-            golds: newGolds,
-            cryptos: newCryptos,
-            rates: newRates,
-            indices: newIndices,
-            commodities: newCommodities,
-            bonds: newBonds,
-            cryptoSentiment: newCryptoSentiment,
-            centralBanks: newCentralBanks,
-            syncTime: now,
-          })
-        );
+        try {
+          localStorage.removeItem('spendlog_market_cache');
+          localStorage.setItem(
+            'spendlog_market_cache_v3',
+            JSON.stringify({
+              stocks: newStocks,
+              usStocks: newUsStocks,
+              golds: newGolds,
+              cryptos: newCryptos,
+              rates: newRates,
+              indices: newIndices,
+              commodities: newCommodities,
+              bonds: newBonds,
+              cryptoSentiment: newCryptoSentiment,
+              centralBanks: newCentralBanks,
+              syncTime: now,
+            })
+          );
+        } catch (_) {}
       }
     } catch (err) {
-      console.error('Failed to sync prices', err);
+      console.warn('Failed to sync prices', err);
     } finally {
       setIsRefreshing(false);
     }
@@ -793,6 +799,10 @@ export default function MarketsPage() {
   useEffect(() => {
     let initialConfig = DEFAULT_WATCHLIST_CONFIG;
     if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('spendlog_market_cache');
+      } catch (_) {}
+
       const configKey = user?.id ? `spendlog_${user.id}_watchlist_config` : 'spendlog_watchlist_config';
       let savedWatchlist = localStorage.getItem(configKey);
       if (!savedWatchlist && user?.id) {
@@ -807,11 +817,11 @@ export default function MarketsPage() {
             watchlistConfigRef.current = parsedCfg;
           }
         } catch (e) {
-          console.error(e);
+          console.warn(e);
         }
       }
 
-      const cached = localStorage.getItem('spendlog_market_cache');
+      const cached = localStorage.getItem('spendlog_market_cache_v3');
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -844,7 +854,7 @@ export default function MarketsPage() {
           if (parsed.centralBanks) setCentralBanks(parsed.centralBanks);
           if (parsed.syncTime) setLastSyncTime(parsed.syncTime);
         } catch (e) {
-          console.error(e);
+          console.warn(e);
         }
       }
     }
@@ -1151,7 +1161,7 @@ export default function MarketsPage() {
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-base font-bold text-cyan-400 font-mono tracking-tight">
-                {isValuesHidden ? '***' : `${indices.XU100?.price?.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '14.012,42'} ₺`}
+                {isValuesHidden ? '***' : indices.XU100?.price ? `${indices.XU100.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺` : '— ₺'}
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -1185,9 +1195,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XBANK</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XBANK?.price || 16717).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : indices.sectors?.XBANK?.price ? Math.round(indices.sectors.XBANK.price).toLocaleString('tr-TR') : '—'}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XBANK?.change ?? 1.90} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XBANK?.change} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
 
@@ -1196,9 +1206,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XHOLD</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XHOLD?.price || 12793).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : indices.sectors?.XHOLD?.price ? Math.round(indices.sectors.XHOLD.price).toLocaleString('tr-TR') : '—'}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XHOLD?.change ?? -1.89} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XHOLD?.change} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
 
@@ -1207,9 +1217,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XUSIN</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XUSIN?.price || 17926).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : indices.sectors?.XUSIN?.price ? Math.round(indices.sectors.XUSIN.price).toLocaleString('tr-TR') : '—'}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XUSIN?.change ?? -1.14} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XUSIN?.change} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
 
@@ -1218,9 +1228,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XULAS</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XULAS?.price || 33869).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : indices.sectors?.XULAS?.price ? Math.round(indices.sectors.XULAS.price).toLocaleString('tr-TR') : '—'}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XULAS?.change ?? 2.22} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XULAS?.change} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
 
@@ -1229,9 +1239,9 @@ export default function MarketsPage() {
                 <span className="text-slate-300 font-medium">XGMYO</span>
                 <div className="flex items-center gap-1.5 font-mono">
                   <span className="font-bold text-white text-[11px]">
-                    {isValuesHidden ? '***' : Math.round(indices.sectors?.XGMYO?.price || 5584).toLocaleString('tr-TR')}
+                    {isValuesHidden ? '***' : indices.sectors?.XGMYO?.price ? Math.round(indices.sectors.XGMYO.price).toLocaleString('tr-TR') : '—'}
                   </span>
-                  <ChangeBadge change={indices.sectors?.XGMYO?.change ?? -1.89} className="!text-[10px] !px-1.5 !py-0" />
+                  <ChangeBadge change={indices.sectors?.XGMYO?.change} className="!text-[10px] !px-1.5 !py-0" />
                 </div>
               </div>
             </div>
@@ -1261,7 +1271,7 @@ export default function MarketsPage() {
               <span className="text-slate-300 font-medium">S&P 500</span>
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="font-bold text-white text-[11px]">
-                  {isValuesHidden ? '***' : indices.SP500?.price?.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) || '7,718.6'}
+                  {isValuesHidden ? '***' : indices.SP500?.price ? indices.SP500.price.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
                 </span>
                 <ChangeBadge change={indices.SP500?.change} className="!text-[10px] !px-1.5 !py-0" />
               </div>
@@ -1270,7 +1280,7 @@ export default function MarketsPage() {
               <span className="text-slate-300 font-medium">NASDAQ</span>
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="font-bold text-white text-[11px]">
-                  {isValuesHidden ? '***' : indices.NASDAQ?.price?.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) || '26,506.9'}
+                  {isValuesHidden ? '***' : indices.NASDAQ?.price ? indices.NASDAQ.price.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
                 </span>
                 <ChangeBadge change={indices.NASDAQ?.change} className="!text-[10px] !px-1.5 !py-0" />
               </div>
@@ -1294,7 +1304,7 @@ export default function MarketsPage() {
               <span className="text-slate-300 font-medium truncate" title="Brent Petrol (BZ=F)">Brent Petrol</span>
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="font-bold text-white text-[11px]">
-                  {isValuesHidden ? '***' : `$${commodities.brent?.price?.toFixed(2) || '95.83'}`}
+                  {isValuesHidden ? '***' : commodities.brent?.price ? `$${commodities.brent.price.toFixed(2)}` : '—'}
                 </span>
                 <ChangeBadge change={commodities.brent?.change} className="!text-[10px] !px-1.5 !py-0" />
               </div>
@@ -1303,7 +1313,7 @@ export default function MarketsPage() {
               <span className="text-slate-300 font-medium truncate" title="Ham Petrol (CL=F WTI)">Ham Petrol (WTI)</span>
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="font-bold text-white text-[11px]">
-                  {isValuesHidden ? '***' : `$${commodities.crude?.price?.toFixed(2) || '91.22'}`}
+                  {isValuesHidden ? '***' : commodities.crude?.price ? `$${commodities.crude.price.toFixed(2)}` : '—'}
                 </span>
                 <ChangeBadge change={commodities.crude?.change} className="!text-[10px] !px-1.5 !py-0" />
               </div>
@@ -1312,7 +1322,7 @@ export default function MarketsPage() {
               <span className="text-slate-300 font-medium truncate" title="VIX Volatilite / Korku Endeksi">VIX (Korku End.)</span>
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="font-bold text-white text-[11px]">
-                  {isValuesHidden ? '***' : `${commodities.vix?.price?.toFixed(2) || '14.53'}`}
+                  {isValuesHidden ? '***' : commodities.vix?.price ? `${commodities.vix.price.toFixed(2)}` : '—'}
                 </span>
                 <ChangeBadge change={commodities.vix?.change} className="!text-[10px] !px-1.5 !py-0" />
               </div>

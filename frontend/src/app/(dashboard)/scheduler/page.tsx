@@ -98,7 +98,7 @@ export default function SchedulerPage() {
     const actualRetry = typeof isRetry === 'boolean' ? isRetry : false;
     try {
       if (!actualRetry) setIsLoading(true);
-      const res = await axios.get(`${SCRAPER_BASE_URL}/api/scheduler/status`, { timeout: 8000 });
+      const res = await axios.get(`${SCRAPER_BASE_URL}/api/scheduler/status`, { timeout: 15000 });
       const fetchedJobs = res.data.jobs || {};
       setJobs(fetchedJobs);
       setMetrics(res.data.metrics || null);
@@ -126,7 +126,7 @@ export default function SchedulerPage() {
         }, 1500);
         return;
       }
-      console.error('Failed to fetch scheduler status', err);
+      console.warn('Failed to fetch scheduler status (will retry on next refresh):', err);
       toast.error('Kazıyıcı servis durumu alınamadı. Backend servisini kontrol edin.');
     } finally {
       setIsLoading(false);

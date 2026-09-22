@@ -170,6 +170,8 @@ interface PredefinedAsset {
 const DEFAULT_PREDEFINED_ASSETS: PredefinedAsset[] = [
   { symbol: 'THYAO', name: 'Türk Hava Yolları', assetType: AssetType.Stock, defaultCurrency: Currency.TRY },
   { symbol: 'GARAN', name: 'Garanti Bankası', assetType: AssetType.Stock, defaultCurrency: Currency.TRY },
+  { symbol: 'ENJSA', name: 'Enerjisa Enerji', assetType: AssetType.Stock, defaultCurrency: Currency.TRY },
+  { symbol: 'ISCTR', name: 'İş Bankası C', assetType: AssetType.Stock, defaultCurrency: Currency.TRY },
   { symbol: 'ASELS', name: 'Aselsan', assetType: AssetType.Stock, defaultCurrency: Currency.TRY },
   { symbol: 'KCHOL', name: 'Koç Holding', assetType: AssetType.Stock, defaultCurrency: Currency.TRY },
   { symbol: 'EREGL', name: 'Ereğli Demir Çelik', assetType: AssetType.Stock, defaultCurrency: Currency.TRY },
@@ -181,9 +183,12 @@ const DEFAULT_PREDEFINED_ASSETS: PredefinedAsset[] = [
   { symbol: 'SOL', name: 'Solana', assetType: AssetType.Crypto, defaultCurrency: Currency.USD },
   { symbol: 'AVAX', name: 'Avalanche', assetType: AssetType.Crypto, defaultCurrency: Currency.USD },
   { symbol: 'ALTIN', name: 'Gram Altın', assetType: AssetType.Commodity, defaultCurrency: Currency.TRY },
+  { symbol: 'GRAM ALTIN', name: 'Gram Altın (Spot TL/GR)', assetType: AssetType.Commodity, defaultCurrency: Currency.TRY },
+  { symbol: 'TAM ALTIN', name: 'Tam Altın', assetType: AssetType.Commodity, defaultCurrency: Currency.TRY },
   { symbol: 'CEYREK', name: 'Çeyrek Altın', assetType: AssetType.Commodity, defaultCurrency: Currency.TRY },
   { symbol: 'GUMUS', name: 'Gram Gümüş', assetType: AssetType.Commodity, defaultCurrency: Currency.TRY },
   { symbol: 'XAUUSD', name: 'Ons Altın', assetType: AssetType.Commodity, defaultCurrency: Currency.USD },
+  { symbol: 'NLR', name: 'VanEck Uranium+Nuclear ETF', assetType: AssetType.ETF, defaultCurrency: Currency.USD },
   { symbol: 'AAPL', name: 'Apple Inc.', assetType: AssetType.Stock, defaultCurrency: Currency.USD },
   { symbol: 'NVDA', name: 'Nvidia Corp.', assetType: AssetType.Stock, defaultCurrency: Currency.USD },
   { symbol: 'MSFT', name: 'Microsoft Corp.', assetType: AssetType.Stock, defaultCurrency: Currency.USD },
@@ -228,7 +233,7 @@ export default function PortfolioPage() {
   const [distribution, setDistribution] = useState<PortfolioDistribution | null>(null);
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [currencyMode, setCurrencyMode] = useState<'TRY' | 'USD'>('TRY');
-  const [usdRate, setUsdRate] = useState<number>(45.00);
+  const [usdRate, setUsdRate] = useState<number>(48.82);
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('1A');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -693,7 +698,7 @@ export default function PortfolioPage() {
       }
       toast.success(`Portföy başarıyla güncellendi! (${updatedCount} varlık güncel fiyata çekildi)`);
     } catch (err) {
-      console.error('Failed to sync portfolio live prices', err);
+      console.warn('Failed to sync portfolio live prices:', err);
       toast.error('Portföy güncellenirken bir hata oluştu.');
     } finally {
       setIsSyncingPrices(false);
@@ -701,14 +706,14 @@ export default function PortfolioPage() {
   };
 
   useEffect(() => {
-    let liveRate = 45.00;
+    let liveRate = 48.82;
     if (typeof window !== 'undefined') {
       const savedSync = localStorage.getItem('spendlog_portfolio_sync_time');
       if (savedSync) {
         setLastPortfolioSyncTime(savedSync);
       }
 
-      const cached = localStorage.getItem('spendlog_market_cache');
+      const cached = localStorage.getItem('spendlog_market_cache_v3') || localStorage.getItem('spendlog_market_cache');
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -724,7 +729,7 @@ export default function PortfolioPage() {
     fetchPortfolioData(liveRate);
 
     // 2. Ardından arka planda sessizce canlı kuru güncelle
-    axios.get(`${SCRAPER_BASE_URL}/api/prices/currency?base=USD&target=TRY`, { timeout: 2000 })
+    axios.get(`${SCRAPER_BASE_URL}/api/prices/currency?base=USD&target=TRY`, { timeout: 3000 })
       .then((usdRes) => {
         if (usdRes.data?.rate && usdRes.data.rate > 0 && Math.abs(usdRes.data.rate - liveRate) > 0.05) {
           setUsdRate(usdRes.data.rate);

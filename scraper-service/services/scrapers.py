@@ -1,8 +1,9 @@
 import asyncio
 import httpx
 import re
+import time
 from typing import Dict, Any, Optional, List
-from services.logger import scraper_logger
+from services.logger import scraper_logger, log_scrape_operation
 from services.sanitizer import DataSanitizer
 from services.headers import HeaderRotator
 from services.resilience import report_selector_failure
@@ -10,12 +11,14 @@ from services.throttler import host_throttler
 from services.circuit_breaker import circuit_registry
 from services.cache import market_cache
 
-# Tanımlı Popüler ve Majör ABD Wall Street Hisseleri
+# Tanımlı Popüler ve Majör ABD Wall Street Hisseleri & Popüler ETF'ler
 KNOWN_US_STOCKS = {
     "NVDA", "AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "GOOG", "META", "NFLX",
     "AVGO", "PLTR", "AMD", "INTC", "COIN", "DIS", "ARM", "BABA", "UBER",
     "PYPL", "SMCI", "QCOM", "BRK.B", "JNJ", "V", "WMT", "JPM", "PG", "MA",
-    "TSM", "ASML", "ORCL", "CRM", "ADBE", "CSCO", "PEP", "KO"
+    "TSM", "ASML", "ORCL", "CRM", "ADBE", "CSCO", "PEP", "KO",
+    # Popüler ETF & Fonlar (Kullanıcının portföyündeki NLR - Uranyum Fonu dahil)
+    "NLR", "URA", "URNM", "QQQ", "SPY", "VOO", "VTI", "SCHD", "DIA", "IWM", "SMH", "TLT"
 }
 
 class FinancialScraperService:
@@ -119,12 +122,13 @@ class FinancialScraperService:
         sym = symbol.upper().strip()
         is_index = sym.startswith("^") or sym in ["XU100", "BIST100", "SP500", "NASDAQ", "DXY", "DX-Y.NYB", "XBANK", "XHOLD", "XUSIN", "XULAS", "XGMYO"]
         clean_symbol = sym.replace(".IS", "").replace(".E", "").strip()
+        t_start = time.time()
 
         # Pazar tespiti (US vs BIST)
         is_us = (market.upper() == "US") or (clean_symbol in KNOWN_US_STOCKS)
 
         # ==========================================
-        # 1. ABD HİSSELERİ (NVDA, AAPL, MSFT, TSLA...)
+        # 1. ABD HİSSELERİ (NVDA, AAPL, MSFT, TSLA, NLR...)
         # ==========================================
         if is_us and not is_index:
             # 0. Önbellek Kontrolü (L1 / L2 RAM)
@@ -148,7 +152,9 @@ class FinancialScraperService:
                         if price and float(price) > 0:
                             chg = ((float(price) - float(prev)) / float(prev) * 100) if (prev and float(prev) > 0) else 0.0
                             cur = meta.get("currency", "USD")
+                            latency = (time.time() - t_start) * 1000
                             scraper_logger.info(f"[YAHOO US STOCK] {clean_symbol} -> ${price} {cur} ({chg:+.2f}%)")
+                            log_scrape_operation("US_STOCKS", clean_symbol, float(price), chg, cur, "Yahoo Direct Chart", latency)
                             return {
                                 "symbol": clean_symbol,
                                 "price": round(float(price), 2),
@@ -162,8 +168,12 @@ class FinancialScraperService:
             yf_res = await asyncio.to_thread(self._fetch_yfinance_fast_info, clean_symbol)
             if yf_res and yf_res.get("price") is not None:
                 yf_res["symbol"] = clean_symbol
+                latency = (time.time() - t_start) * 1000
+                log_scrape_operation("US_STOCKS", clean_symbol, yf_res["price"], yf_res.get("change"), yf_res.get("currency", "USD"), "yfinance Fast-Info", latency)
                 return yf_res
 
+            latency = (time.time() - t_start) * 1000
+            log_scrape_operation("US_STOCKS", clean_symbol, None, 0.0, "USD", "Failed All Sources", latency, status="FAILED")
             return {"symbol": clean_symbol, "price": None, "change": 0.0, "currency": "USD"}
 
         # ==========================================
@@ -180,18 +190,25 @@ class FinancialScraperService:
         if not is_index and not sym.startswith("^") and len(clean_symbol) <= 6:
             tv_data = await self.get_tradingview_stocks([clean_symbol])
             if clean_symbol in tv_data and tv_data[clean_symbol].get("price") is not None:
-                scraper_logger.info(f"[TRADINGVIEW BIST] {clean_symbol} -> {tv_data[clean_symbol]['price']} TRY ({tv_data[clean_symbol]['change']:+.2f}%)")
-                return tv_data[clean_symbol]
+                item_data = tv_data[clean_symbol]
+                latency = (time.time() - t_start) * 1000
+                scraper_logger.info(f"[TRADINGVIEW BIST] {clean_symbol} -> {item_data['price']} TRY ({item_data['change']:+.2f}%)")
+                log_scrape_operation("BIST_STOCKS", clean_symbol, item_data['price'], item_data['change'], "TRY", "TradingView Scanner", latency)
+                return item_data
 
         # Özel Tahvil Sembolleri için Doğrudan CNBC Quote API
         if clean_symbol in ["US2Y", "2YY=F"]:
             cnbc_data = await self.get_cnbc_quote("US2Y")
             if cnbc_data:
                 cnbc_data["symbol"] = clean_symbol
+                latency = (time.time() - t_start) * 1000
+                log_scrape_operation("BONDS", clean_symbol, cnbc_data["price"], cnbc_data.get("change"), "USD", "CNBC Quote", latency)
                 return cnbc_data
         elif clean_symbol in ["US10Y"]:
             cnbc_data = await self.get_cnbc_quote("US10Y")
             if cnbc_data:
+                latency = (time.time() - t_start) * 1000
+                log_scrape_operation("BONDS", clean_symbol, cnbc_data["price"], cnbc_data.get("change"), "USD", "CNBC Quote", latency)
                 return cnbc_data
 
         # Endeks Sembol Eşleme
@@ -222,7 +239,9 @@ class FinancialScraperService:
                         prev = meta.get("chartPreviousClose") or meta.get("previousClose")
                         if price and float(price) > 0:
                             chg = ((float(price) - float(prev)) / float(prev) * 100) if prev else 0.0
+                            latency = (time.time() - t_start) * 1000
                             scraper_logger.info(f"[YAHOO BIST] {clean_symbol} -> {price} TRY ({chg:+.2f}%)")
+                            log_scrape_operation("BIST_STOCKS", clean_symbol, float(price), chg, "TRY", "Yahoo Direct (.IS)", latency)
                             return {
                                 "symbol": clean_symbol,
                                 "price": round(float(price), 2),
@@ -249,8 +268,12 @@ class FinancialScraperService:
                             yf_res = await asyncio.to_thread(self._fetch_yfinance_fast_info, yahoo_sym)
                             if yf_res and yf_res.get("price") is not None and yf_res.get("change") != 0.0:
                                 yf_res["symbol"] = clean_symbol
+                                latency = (time.time() - t_start) * 1000
+                                log_scrape_operation("INDICES", clean_symbol, yf_res["price"], yf_res.get("change"), cur, "yfinance Fallback", latency)
                                 return yf_res
+                        latency = (time.time() - t_start) * 1000
                         scraper_logger.info(f"[YAHOO GLOBAL] {yahoo_sym} -> {price} {cur} ({chg:+.2f}%)")
+                        log_scrape_operation("INDICES", clean_symbol, float(price), chg, cur, f"Yahoo ({yahoo_sym})", latency)
                         return {
                             "symbol": clean_symbol,
                             "price": round(float(price), 2),
@@ -273,7 +296,9 @@ class FinancialScraperService:
                             price = hisse.get("satis") or hisse.get("kapanis") or hisse.get("alis")
                             chg = hisse.get("yuzdedegisim") or 0.0
                             if price and float(price) > 0:
+                                latency = (time.time() - t_start) * 1000
                                 scraper_logger.info(f"[BIGPARA] {clean_symbol} -> {price} TRY ({chg}%)")
+                                log_scrape_operation("BIST_STOCKS", clean_symbol, float(price), float(chg), "TRY", "BigPara", latency)
                                 return {
                                     "symbol": clean_symbol,
                                     "price": round(float(price), 2),
@@ -288,8 +313,13 @@ class FinancialScraperService:
         yf_res = await asyncio.to_thread(self._fetch_yfinance_fast_info, yf_symbol)
         if yf_res and yf_res.get("price") is not None:
             yf_res["symbol"] = clean_symbol
+            latency = (time.time() - t_start) * 1000
+            log_scrape_operation("STOCKS", clean_symbol, yf_res["price"], yf_res.get("change"), yf_res.get("currency", "TRY"), "yfinance Fast-Info", latency)
             return yf_res
 
+        latency = (time.time() - t_start) * 1000
+        category = "INDICES" if is_index else "BIST_STOCKS"
+        log_scrape_operation(category, clean_symbol, None, 0.0, "TRY", "Failed All Sources", latency, status="FAILED")
         return {"symbol": clean_symbol, "price": None, "change": 0.0, "currency": "TRY"}
 
     async def get_bist_stock_price(self, symbol: str) -> Optional[float]:
@@ -369,6 +399,7 @@ class FinancialScraperService:
 
     async def get_gold_data(self, gold_type: str = "gram-altin") -> Dict[str, Any]:
         """Altın ve Emtia verisini fiyat ve yüzde değişimiyle döner."""
+        t_start = time.time()
         norm = gold_type.upper().replace(" ", "").replace("-", "").replace("_", "").strip()
 
         target_key = "gram-altin"
@@ -383,12 +414,15 @@ class FinancialScraperService:
 
         golds = await self._fetch_all_bigpara_golds()
         if target_key in golds and golds[target_key]["price"] > 0:
-            return {
+            res_item = {
                 "type": target_key,
                 "price": golds[target_key]["price"],
                 "change": golds[target_key].get("change", 0.0),
                 "currency": golds[target_key].get("currency", "TRY")
             }
+            latency = (time.time() - t_start) * 1000
+            log_scrape_operation("COMMODITIES", target_key, res_item["price"], res_item["change"], res_item["currency"], "BigPara Altın", latency)
+            return res_item
 
         # Ons için Yahoo Direct XAUUSD Chart Fallback
         if target_key in ["ons-altin", "ons"]:
@@ -402,6 +436,8 @@ class FinancialScraperService:
                         prev = meta.get("chartPreviousClose") or meta.get("previousClose")
                         if p and float(p) > 0:
                             chg = ((float(p) - float(prev)) / float(prev) * 100) if prev else 0.0
+                            latency = (time.time() - t_start) * 1000
+                            log_scrape_operation("COMMODITIES", target_key, float(p), chg, "USD", "Yahoo Direct (GC=F)", latency)
                             return {
                                 "type": target_key,
                                 "price": round(float(p), 2),
@@ -411,6 +447,8 @@ class FinancialScraperService:
             except Exception:
                 pass
 
+        latency = (time.time() - t_start) * 1000
+        log_scrape_operation("COMMODITIES", target_key, None, 0.0, "TRY", "Failed All Sources", latency, status="FAILED")
         return {"type": target_key, "price": None, "change": 0.0, "currency": "TRY"}
 
     async def get_gold_commodity_price(self, gold_type: str = "gram-altin") -> Optional[float]:
@@ -423,6 +461,7 @@ class FinancialScraperService:
         Kripto Para Canlı Fiyat ve 24s Değişim Oranını Çeker.
         (BTC, ETH, SOL, AVAX, BNB, XRP, DOGE, HYPE, SYRUP vb.)
         """
+        t_start = time.time()
         raw_sym = symbol.upper().strip()
         is_try = any(t in raw_sym for t in ["/TL", "/TRY", "TRY", "TL"]) or vs_currency.lower() in ["try", "tl"]
         clean_sym = (
@@ -448,9 +487,12 @@ class FinancialScraperService:
                         p = float(data.get("lastPrice", 0))
                         chg = float(data.get("priceChangePercent", 0))
                         if p > 0:
+                            latency = (time.time() - t_start) * 1000
+                            final_price = round(p, 4) if p < 10 else round(p, 2)
+                            log_scrape_operation("CRYPTO", clean_sym, final_price, chg, "TRY", "Binance TRY 24hr", latency)
                             return {
                                 "symbol": clean_sym,
-                                "price": round(p, 4) if p < 10 else round(p, 2),
+                                "price": final_price,
                                 "change": round(chg, 2),
                                 "vs_currency": "TRY"
                             }
@@ -466,18 +508,23 @@ class FinancialScraperService:
                     p = float(data.get("lastPrice", 0))
                     chg = float(data.get("priceChangePercent", 0))
                     if p > 0:
+                        latency = (time.time() - t_start) * 1000
                         if is_try:
                             usd_rate = await self.get_currency_rate("USD", "TRY") or 48.82
+                            final_p = round(p * usd_rate, 2)
+                            log_scrape_operation("CRYPTO", clean_sym, final_p, chg, "TRY", "Binance USDT * Live USD", latency)
                             return {
                                 "symbol": clean_sym,
-                                "price": round(p * usd_rate, 2),
+                                "price": final_p,
                                 "change": round(chg, 2),
                                 "vs_currency": "TRY"
                             }
                         else:
+                            final_p = round(p, 4) if p < 10 else round(p, 2)
+                            log_scrape_operation("CRYPTO", clean_sym, final_p, chg, "USD", "Binance USDT 24hr", latency)
                             return {
                                 "symbol": clean_sym,
-                                "price": round(p, 4) if p < 10 else round(p, 2),
+                                "price": final_p,
                                 "change": round(chg, 2),
                                 "vs_currency": "USD"
                             }
@@ -654,6 +701,7 @@ class FinancialScraperService:
         2. Hat: TCMB Resmi Gösterge Kurları XML
         3. Hat: Yahoo Direct Chart (USDTRY=X, EURTRY=X)
         """
+        t_start = time.time()
         b = base.upper()
         t = target.upper()
 
@@ -662,7 +710,10 @@ class FinancialScraperService:
             try:
                 bp_currs = await self._fetch_all_bigpara_currencies()
                 if b in bp_currs and bp_currs[b].get("rate"):
-                    return bp_currs[b]
+                    item = bp_currs[b]
+                    latency = (time.time() - t_start) * 1000
+                    log_scrape_operation("CURRENCY", f"{b}/{t}", item["rate"], item.get("change"), "TRY", "BigPara Döviz", latency)
+                    return item
             except Exception as e:
                 scraper_logger.debug(f"BigPara currency error for {b}: {e}")
 
@@ -670,7 +721,10 @@ class FinancialScraperService:
             try:
                 tcmb_currs = await self._fetch_tcmb_currencies()
                 if b in tcmb_currs and tcmb_currs[b].get("rate"):
-                    return tcmb_currs[b]
+                    item = tcmb_currs[b]
+                    latency = (time.time() - t_start) * 1000
+                    log_scrape_operation("CURRENCY", f"{b}/{t}", item["rate"], 0.0, "TRY", "TCMB XML", latency)
+                    return item
             except Exception as e:
                 scraper_logger.debug(f"TCMB currency error for {b}: {e}")
 
@@ -687,6 +741,8 @@ class FinancialScraperService:
                     prev = meta.get("chartPreviousClose") or meta.get("previousClose")
                     if p and float(p) > 0:
                         chg = ((float(p) - float(prev)) / float(prev) * 100) if prev else 0.0
+                        latency = (time.time() - t_start) * 1000
+                        log_scrape_operation("CURRENCY", f"{b}/{t}", round(float(p), 4), round(chg, 2), "TRY", "Yahoo Direct Chart", latency)
                         return {
                             "base": b,
                             "target": t,
@@ -698,6 +754,8 @@ class FinancialScraperService:
 
         # Modern Güvenli Fallback (Eski 34.50 yerine güncel taban kurlar)
         fallback_rate = 48.82 if b == "USD" else (55.95 if b == "EUR" else None)
+        latency = (time.time() - t_start) * 1000
+        log_scrape_operation("CURRENCY", f"{b}/{t}", fallback_rate, 0.0, "TRY", "Static Fallback", latency, status="FALLBACK")
         return {"base": b, "target": t, "rate": fallback_rate, "change": 0.0}
 
     async def get_currency_rate(self, base: str = "USD", target: str = "TRY") -> Optional[float]:
@@ -763,23 +821,23 @@ class FinancialScraperService:
 
         bp_dict = bp_indices if isinstance(bp_indices, dict) else {}
 
-        def _safe_res(res, sym, fallback_price, cur="TRY"):
+        def _safe_res(res, sym, fallback_price=None, cur="TRY"):
             if sym in bp_dict and bp_dict[sym].get("price"):
                 return bp_dict[sym]
             if not isinstance(res, Exception) and isinstance(res, dict) and res.get("price"):
                 return res
             return {"symbol": sym, "price": fallback_price, "change": 0.0, "currency": cur}
 
-        xu_final = _safe_res(xu, "XU100", 14000.0, "TRY")
-        sp_final = _safe_res(sp, "^GSPC", 7700.0, "USD")
-        nq_final = _safe_res(nq, "^IXIC", 26500.0, "USD")
+        xu_final = _safe_res(xu, "XU100", None, "TRY")
+        sp_final = _safe_res(sp, "^GSPC", None, "USD")
+        nq_final = _safe_res(nq, "^IXIC", None, "USD")
 
         sectors = {
-            "XBANK": _safe_res(bp_dict.get("XBANK"), "XBANK", 16650.0, "TRY"),
-            "XHOLD": _safe_res(bp_dict.get("XHOLD"), "XHOLD", 14460.0, "TRY"),
-            "XUSIN": _safe_res(bp_dict.get("XUSIN"), "XUSIN", 19470.0, "TRY"),
-            "XULAS": _safe_res(bp_dict.get("XULAS"), "XULAS", 36080.0, "TRY"),
-            "XGMYO": _safe_res(bp_dict.get("XGMYO"), "XGMYO", 6120.0, "TRY"),
+            "XBANK": _safe_res(bp_dict.get("XBANK"), "XBANK", None, "TRY"),
+            "XHOLD": _safe_res(bp_dict.get("XHOLD"), "XHOLD", None, "TRY"),
+            "XUSIN": _safe_res(bp_dict.get("XUSIN"), "XUSIN", None, "TRY"),
+            "XULAS": _safe_res(bp_dict.get("XULAS"), "XULAS", None, "TRY"),
+            "XGMYO": _safe_res(bp_dict.get("XGMYO"), "XGMYO", None, "TRY"),
         }
 
         return {

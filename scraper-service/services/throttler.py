@@ -9,17 +9,18 @@ class HostThrottler:
     Her dış sağlayıcı (Yahoo, BigPara, CNBC, CoinGecko) için saniyede azami 
     istek sınırını (rate limit) denetler ve HTTP 429 / WAF engellerini önler.
     """
-    def __init__(self, default_rate: int = 3, time_period: float = 1.0):
+    def __init__(self, default_rate: int = 8, time_period: float = 1.0):
         self.default_rate = default_rate
         self.time_period = time_period
         self._limiters: Dict[str, AsyncLimiter] = {
-            "query1.finance.yahoo.com": AsyncLimiter(2, 1.0),
-            "query2.finance.yahoo.com": AsyncLimiter(2, 1.0),
-            "bigpara.hurriyet.com.tr": AsyncLimiter(4, 1.0),
-            "quote.cnbc.com": AsyncLimiter(3, 1.0),
-            "api.coingecko.com": AsyncLimiter(2, 1.0),
-            "api.binance.com": AsyncLimiter(5, 1.0),
-            "www.investing.com": AsyncLimiter(2, 1.0),
+            "query1.finance.yahoo.com": AsyncLimiter(10, 1.0),
+            "query2.finance.yahoo.com": AsyncLimiter(10, 1.0),
+            "bigpara.hurriyet.com.tr": AsyncLimiter(10, 1.0),
+            "quote.cnbc.com": AsyncLimiter(6, 1.0),
+            "api.coingecko.com": AsyncLimiter(4, 1.0),
+            "api.binance.com": AsyncLimiter(15, 1.0),
+            "scanner.tradingview.com": AsyncLimiter(15, 1.0),
+            "www.investing.com": AsyncLimiter(4, 1.0),
         }
         self._lock = asyncio.Lock()
 
