@@ -389,10 +389,19 @@ export default function MarketsPage() {
         if (summaryRes.status === 200 && summaryRes.data) {
           const data = summaryRes.data;
 
-          const summaryBistMap = new Map<string, any>((data.bist || []).map((s: any) => [s.symbol?.toUpperCase(), s]));
-          const summaryUsMap = new Map<string, any>((data.us || []).map((u: any) => [u.symbol?.toUpperCase(), u]));
-          const summaryGoldMap = new Map<string, any>((data.gold || []).map((g: any) => [g.type?.toLowerCase(), g]));
-          const summaryCryptoMap = new Map<string, any>((data.crypto || []).map((c: any) => [c.symbol?.toUpperCase(), c]));
+          const bistRaw = data.bist || [];
+          const bistList: any[] = Array.isArray(bistRaw) ? bistRaw : Object.values(bistRaw);
+          const usRaw = data.us || [];
+          const usList: any[] = Array.isArray(usRaw) ? usRaw : Object.values(usRaw);
+          const goldRaw = data.gold || [];
+          const goldList: any[] = Array.isArray(goldRaw) ? goldRaw : Object.values(goldRaw);
+          const cryptoRaw = data.crypto || [];
+          const cryptoList: any[] = Array.isArray(cryptoRaw) ? cryptoRaw : Object.values(cryptoRaw);
+
+          const summaryBistMap = new Map<string, any>(bistList.map((s: any) => [s.symbol?.toUpperCase(), s]));
+          const summaryUsMap = new Map<string, any>(usList.map((u: any) => [u.symbol?.toUpperCase(), u]));
+          const summaryGoldMap = new Map<string, any>(goldList.map((g: any) => [g.type?.toLowerCase(), g]));
+          const summaryCryptoMap = new Map<string, any>(cryptoList.map((c: any) => [c.symbol?.toUpperCase(), c]));
 
           // Özet servisinde yer almayan özel sembolleri tespit et
           const missingStockAndCryptoSymbols: string[] = [];
@@ -526,16 +535,29 @@ export default function MarketsPage() {
             setCurrencyRates(updatedRates);
           }
 
-          let updatedIndices = indices;
-          if (data.indices) {
-            updatedIndices = {
-              XU100: data.indices.XU100 || INITIAL_INDICES.XU100,
-              SP500: data.indices.SP500 || INITIAL_INDICES.SP500,
-              NASDAQ: data.indices.NASDAQ || INITIAL_INDICES.NASDAQ,
-              sectors: data.indices.sectors || indices.sectors || INITIAL_INDICES.sectors,
-            };
-            setIndices(updatedIndices);
-          }
+          // Endeksler: data.indices (doğrudan) ve data.bist (dict olarak) hibrit çözüm
+          const rawIndices = data.indices || {};
+          const bistObj = (!Array.isArray(data.bist) && typeof data.bist === 'object') ? (data.bist || {}) : {};
+
+          const xu100Data = rawIndices.XU100 || bistObj.XU100 || summaryBistMap.get('XU100') || INITIAL_INDICES.XU100;
+          const sp500Data = rawIndices.SP500 || INITIAL_INDICES.SP500;
+          const nasdaqData = rawIndices.NASDAQ || INITIAL_INDICES.NASDAQ;
+
+          const sectorsData = {
+            XBANK: rawIndices.sectors?.XBANK || bistObj.XBANK || summaryBistMap.get('XBANK') || INITIAL_INDICES.sectors.XBANK,
+            XHOLD: rawIndices.sectors?.XHOLD || bistObj.XHOLD || summaryBistMap.get('XHOLD') || INITIAL_INDICES.sectors.XHOLD,
+            XUSIN: rawIndices.sectors?.XUSIN || bistObj.XUSIN || summaryBistMap.get('XUSIN') || INITIAL_INDICES.sectors.XUSIN,
+            XULAS: rawIndices.sectors?.XULAS || bistObj.XULAS || summaryBistMap.get('XULAS') || INITIAL_INDICES.sectors.XULAS,
+            XGMYO: rawIndices.sectors?.XGMYO || bistObj.XGMYO || summaryBistMap.get('XGMYO') || INITIAL_INDICES.sectors.XGMYO,
+          };
+
+          const updatedIndices = {
+            XU100: xu100Data,
+            SP500: sp500Data,
+            NASDAQ: nasdaqData,
+            sectors: sectorsData,
+          };
+          setIndices(updatedIndices);
 
           let updatedCommodities = commodities;
           if (data.commodities) {

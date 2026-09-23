@@ -118,17 +118,17 @@ export default function SchedulerPage() {
       setEditingCron(crons);
       setTargetUrls(urls);
       setBackupUrls(bUrls);
+      setIsLoading(false);
     } catch (err) {
-      if (!isRetry) {
+      if (!actualRetry) {
         // 1.5 sn sonra tek seferlik sessiz yeniden deneme (warm-up / geçici ağ gecikmesi koruması)
         setTimeout(() => {
           fetchSchedulerStatus(true);
         }, 1500);
-        return;
+        return; // isLoading hâlâ true — retry bitene kadar spinner dönmeye devam eder
       }
       console.warn('Failed to fetch scheduler status (will retry on next refresh):', err);
       toast.error('Kazıyıcı servis durumu alınamadı. Backend servisini kontrol edin.');
-    } finally {
       setIsLoading(false);
     }
   };
