@@ -84,6 +84,12 @@ public class GetCreditCardExpensesQueryHandler : IRequestHandler<GetCreditCardEx
         if (request.IsLiveEntry.HasValue)
             query = query.Where(c => c.IsLiveEntry == request.IsLiveEntry.Value);
 
+        if (request.Year.HasValue)
+            query = query.Where(c => c.Year == request.Year.Value);
+
+        if (request.Month.HasValue)
+            query = query.Where(c => c.Month == request.Month.Value);
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim();
@@ -92,14 +98,6 @@ public class GetCreditCardExpensesQueryHandler : IRequestHandler<GetCreditCardEx
                 c.Description.Contains(search) ||
                 (c.CardNumberMasked != null && c.CardNumberMasked.Contains(search)) ||
                 (c.OriginalNote != null && EF.Functions.Like(c.OriginalNote, $"%{search}%")));
-        }
-        else
-        {
-            if (request.Year.HasValue)
-                query = query.Where(c => c.Year == request.Year.Value);
-
-            if (request.Month.HasValue)
-                query = query.Where(c => c.Month == request.Month.Value);
         }
 
         if (request.CategoryId.HasValue)

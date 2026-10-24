@@ -10,6 +10,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useToast } from '@/components/ui/Toast';
 import { CategoryIcon } from '@/components/ui/CategoryIcon';
 import axios from 'axios';
+import * as XLSX from 'xlsx';
 import {
   CreditCard,
   Upload,
@@ -20,7 +21,9 @@ import {
   AlertCircle,
   Loader2,
   Trash2,
+  ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
   Filter,
   Plus,
   ArrowUpRight,
@@ -256,7 +259,7 @@ export default function CreditCardsPage() {
   const [livePeriods, setLivePeriods] = useState<PeriodSummary[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<number | ''>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchAllPeriods, setSearchAllPeriods] = useState(true); // Global Arama Modu (Tüm Dönemlerde Ara)
+  const [searchAllPeriods, setSearchAllPeriods] = useState(false); // Global Arama Modu (Tüm Dönemlerde Ara)
   const [categoryChartType, setCategoryChartType] = useState<'stacked-bar' | 'area' | 'line'>('area');
   const [isCategoryChartFullscreen, setIsCategoryChartFullscreen] = useState(false);
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
@@ -264,6 +267,9 @@ export default function CreditCardsPage() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [selectedSubCategoryFilter, setSelectedSubCategoryFilter] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'ANALYTICS' | 'EXPENSES' | 'CATEGORIES' | 'RECURRING'>('ANALYTICS');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
+  const [exportingPeriod, setExportingPeriod] = useState<string | null>(null);
 
   // ESC tuşu ile tam ekrandan çıkma
   useEffect(() => {
@@ -332,15 +338,15 @@ export default function CreditCardsPage() {
   const fetchExpenses = async () => {
     try {
       let url = '/api/creditcardexpenses?';
+      const isGlobal = searchAllPeriods || (showLiveOnly ? selectedLivePeriod === 'ALL' : selectedPeriod === 'ALL');
       if (showLiveOnly) {
         url += 'isLiveEntry=true&';
-        if (selectedLivePeriod && selectedLivePeriod !== 'ALL' && !searchAllPeriods) {
+        if (!isGlobal && selectedLivePeriod) {
           const [year, month] = selectedLivePeriod.split('-');
           url += `year=${year}&month=${month}&`;
         }
       } else {
         url += 'isLiveEntry=false&';
-        const isGlobal = searchAllPeriods || selectedPeriod === 'ALL' || searchTerm.trim().length > 0;
         if (!isGlobal && selectedPeriod) {
           const [year, month] = selectedPeriod.split('-');
           url += `year=${year}&month=${month}&`;
@@ -1296,7 +1302,7 @@ export default function CreditCardsPage() {
 
   // Filtered Expenses by Active Card, Category Filter & Search
   const displayedExpenses = useMemo(() => {
-    const isGlobal = searchAllPeriods || selectedPeriod === 'ALL' || searchTerm.trim().length > 0;
+    const isGlobal = searchAllPeriods || (showLiveOnly ? selectedLivePeriod === 'ALL' : selectedPeriod === 'ALL');
     
     // Veri Havuzu: Global modda allExpenses + expenses birleşimi
     let list: CreditCardExpense[];
@@ -1310,7 +1316,14 @@ export default function CreditCardsPage() {
         list = expenses;
       }
     } else {
-      list = expenses;
+      // Tek Ay Modu: Güvenlik filtrelemesi ile yalnızca seçili dönemin harcamaları listelenir
+      const activeKey = showLiveOnly ? selectedLivePeriod : selectedPeriod;
+      if (activeKey && activeKey !== 'ALL') {
+        const [targetYear, targetMonth] = activeKey.split('-').map(Number);
+        list = expenses.filter((e) => e.year === targetYear && e.month === targetMonth);
+      } else {
+        list = expenses;
+      }
     }
 
     // 1. Çok Terimli Metin Arama (Multi-Token Professional Search)
@@ -1355,12 +1368,337 @@ export default function CreditCardsPage() {
     allExpenses,
     searchAllPeriods,
     selectedPeriod,
+    selectedLivePeriod,
+    showLiveOnly,
     searchTerm,
     activeCardFilter,
     selectedCategoryFilter,
     selectedSubCategoryFilter,
     categories,
   ]);
+
+  const totalPages = Math.ceil(displayedExpenses.length / pageSize) || 1;
+  const paginatedExpenses = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return displayedExpenses.slice(start, start + pageSize);
+  }, [displayedExpenses, currentPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
+  // 📊 PROFESYONEL EXCEL DIŞA AKTAR: DÖNEM BAZINDA KART DAĞILIMI VE TÜM HARCAMALAR
+  const handleExportPeriodExpenses = async (periodKey: string, displayDate: string, periodSummary?: PeriodSummary) => {
+    try {
+      setExportingPeriod(periodKey);
+      const [yearStr, monthStr] = periodKey.split('-');
+      const targetYear = Number(yearStr);
+      const targetMonth = Number(monthStr);
+
+      // 1. Dönem Harcamalarını Al (Önce allExpenses, yoksa API'den çek)
+      let expList = allExpenses.filter((e) => e.year === targetYear && e.month === targetMonth);
+      if (expList.length === 0) {
+        const res = await api.get<CreditCardExpense[]>(`/api/creditcardexpenses?isLiveEntry=false&year=${targetYear}&month=${targetMonth}`);
+        expList = res.data;
+      }
+
+      if (expList.length === 0) {
+        toast.error(`${displayDate} dönemine ait dışa aktarılacak harcama kaydı bulunamadı.`);
+        return;
+      }
+
+      // 2. Kart Bazlı İstatistikleri ve Kırılımları Çıkar
+      const cardStatsMap = new Map<string, {
+        cardFormatted: string;
+        expenseTotal: number;
+        paymentTotal: number;
+        expenseCount: number;
+        paymentCount: number;
+        accountName: string;
+      }>();
+
+      for (const exp of expList) {
+        const cardKey = formatCardLast4(exp.cardNumberMasked);
+        const curr = cardStatsMap.get(cardKey) || {
+          cardFormatted: cardKey,
+          expenseTotal: 0,
+          paymentTotal: 0,
+          expenseCount: 0,
+          paymentCount: 0,
+          accountName: exp.accountName || accounts.find((a) => a.id === exp.accountId)?.name || 'Kredi Kartı',
+        };
+
+        if (exp.isExpense) {
+          curr.expenseTotal += Math.abs(exp.tutar);
+          curr.expenseCount += 1;
+        } else {
+          curr.paymentTotal += Math.abs(exp.tutar);
+          curr.paymentCount += 1;
+        }
+        cardStatsMap.set(cardKey, curr);
+      }
+
+      const cardStatsList = Array.from(cardStatsMap.values()).sort((a, b) => b.expenseTotal - a.expenseTotal);
+      const grandExpenseTotal = cardStatsList.reduce((acc, c) => acc + c.expenseTotal, 0);
+      const grandPaymentTotal = cardStatsList.reduce((acc, c) => acc + c.paymentTotal, 0);
+      const grandCount = expList.length;
+
+      // 3. Excel Çalışma Kitabını Oluştur (Multi-Sheet)
+      const wb = XLSX.utils.book_new();
+
+      // --- SHEET 1: Kart Dağılımı ve Özet Tablosu ---
+      const summaryHeader = [
+        { 'Metrik / Rapor Bilgisi': 'Ekstre Dönemi', 'Değer': displayDate },
+        { 'Metrik / Rapor Bilgisi': 'Toplam Dönem Harcaması', 'Değer': Number(grandExpenseTotal.toFixed(2)) },
+        { 'Metrik / Rapor Bilgisi': 'Toplam Yapılan Ödeme', 'Değer': Number(grandPaymentTotal.toFixed(2)) },
+        { 'Metrik / Rapor Bilgisi': 'Net Dönem Bakiyesi', 'Değer': Number((grandExpenseTotal - grandPaymentTotal).toFixed(2)) },
+        { 'Metrik / Rapor Bilgisi': 'Dönem Toplam İşlem Adedi', 'Değer': grandCount },
+        { 'Metrik / Rapor Bilgisi': 'Kullanılan Kart Sayısı', 'Değer': cardStatsList.length },
+        { 'Metrik / Rapor Bilgisi': 'Rapor Oluşturma Zamanı', 'Değer': `${new Date().toLocaleDateString('tr-TR')} ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}` },
+        {},
+        { 'Metrik / Rapor Bilgisi': '=== KART BAZINDA HARCAMA DAĞILIM TABLOSU ===', 'Değer': '' },
+      ];
+
+      const cardBreakdownRows = cardStatsList.map((c) => ({
+        'Kart No': c.cardFormatted,
+        'Kart / Hesap Adı': c.accountName,
+        'Harcama İşlem Adedi': c.expenseCount,
+        'Toplam Harcama (₺)': Number(c.expenseTotal.toFixed(2)),
+        'Ödeme Adedi': c.paymentCount,
+        'Toplam Ödeme (₺)': Number(c.paymentTotal.toFixed(2)),
+        'Net Harcama (₺)': Number((c.expenseTotal - c.paymentTotal).toFixed(2)),
+        'Harcama Payı (%)': grandExpenseTotal > 0 ? Number(((c.expenseTotal / grandExpenseTotal) * 100).toFixed(2)) : 0,
+      }));
+
+      cardBreakdownRows.push({
+        'Kart No': 'GENEL TOPLAM',
+        'Kart / Hesap Adı': `${cardStatsList.length} Kart`,
+        'Harcama İşlem Adedi': cardStatsList.reduce((acc, c) => acc + c.expenseCount, 0),
+        'Toplam Harcama (₺)': Number(grandExpenseTotal.toFixed(2)),
+        'Ödeme Adedi': cardStatsList.reduce((acc, c) => acc + c.paymentCount, 0),
+        'Toplam Ödeme (₺)': Number(grandPaymentTotal.toFixed(2)),
+        'Net Harcama (₺)': Number((grandExpenseTotal - grandPaymentTotal).toFixed(2)),
+        'Harcama Payı (%)': 100,
+      });
+
+      const wsSummary = XLSX.utils.json_to_sheet(summaryHeader, { header: ['Metrik / Rapor Bilgisi', 'Değer'] });
+      XLSX.utils.sheet_add_json(wsSummary, cardBreakdownRows, { origin: 'A10' });
+      wsSummary['!cols'] = [
+        { wch: 28 },
+        { wch: 24 },
+        { wch: 22 },
+        { wch: 20 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 16 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Kart Dağılımı ve Özet');
+
+      // --- SHEET 2: Tüm Harcamalar (Kart Bazında Sıralı) ---
+      const sortedExpenses = [...expList].sort((a, b) => {
+        const cardA = formatCardLast4(a.cardNumberMasked);
+        const cardB = formatCardLast4(b.cardNumberMasked);
+        if (cardA !== cardB) return cardA.localeCompare(cardB);
+        return new Date(b.tarih).getTime() - new Date(a.tarih).getTime();
+      });
+
+      const expenseRows = sortedExpenses.map((e) => ({
+        'Kart No': formatCardLast4(e.cardNumberMasked),
+        'Tarih': e.tarih ? new Date(e.tarih).toLocaleDateString('tr-TR') : '',
+        'Açıklama': e.description || '',
+        'Taksit / Ek Bilgi': e.descriptionInfo || '',
+        'Ana Kategori': e.categoryName || e.mainCategory || 'Kategorisiz',
+        'Alt Kategori': e.subCategoryName || e.category || 'Genel',
+        'Tutar (₺)': Number(Math.abs(e.tutar).toFixed(2)),
+        'İşlem Türü': e.isExpense ? 'Harcama' : 'Ödeme / İade',
+        'Kart / Hesap Adı': e.accountName || accounts.find((a) => a.id === e.accountId)?.name || 'Kredi Kartı',
+        'Dönem': displayDate,
+      }));
+
+      const wsExpenses = XLSX.utils.json_to_sheet(expenseRows);
+      wsExpenses['!cols'] = [
+        { wch: 14 },
+        { wch: 13 },
+        { wch: 38 },
+        { wch: 20 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 20 },
+        { wch: 14 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsExpenses, 'Tüm Harcamalar');
+
+      // --- SHEET 3+: Her Bir Kart İçin Özel Sayfa ---
+      for (const card of cardStatsList) {
+        const cardExpList = expList
+          .filter((e) => formatCardLast4(e.cardNumberMasked) === card.cardFormatted)
+          .sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime());
+
+        if (cardExpList.length > 0) {
+          const cardRows = cardExpList.map((e) => ({
+            'Tarih': e.tarih ? new Date(e.tarih).toLocaleDateString('tr-TR') : '',
+            'Açıklama': e.description || '',
+            'Taksit / Ek Bilgi': e.descriptionInfo || '',
+            'Ana Kategori': e.categoryName || e.mainCategory || 'Kategorisiz',
+            'Alt Kategori': e.subCategoryName || e.category || 'Genel',
+            'Tutar (₺)': Number(Math.abs(e.tutar).toFixed(2)),
+            'İşlem Türü': e.isExpense ? 'Harcama' : 'Ödeme / İade',
+          }));
+
+          cardRows.push({
+            'Tarih': 'TOPLAM',
+            'Açıklama': `${card.cardFormatted} (${card.expenseCount} Harcama)`,
+            'Taksit / Ek Bilgi': '',
+            'Ana Kategori': '',
+            'Alt Kategori': '',
+            'Tutar (₺)': Number(card.expenseTotal.toFixed(2)),
+            'İşlem Türü': 'Net: ' + (card.expenseTotal - card.paymentTotal).toFixed(2) + ' ₺',
+          });
+
+          const wsCard = XLSX.utils.json_to_sheet(cardRows);
+          wsCard['!cols'] = [
+            { wch: 13 },
+            { wch: 38 },
+            { wch: 20 },
+            { wch: 22 },
+            { wch: 22 },
+            { wch: 15 },
+            { wch: 16 },
+          ];
+          const cleanSheetTitle = card.cardFormatted.replace(/[^\w\d\s-]/g, '').trim() || 'Kart Detay';
+          XLSX.utils.book_append_sheet(wb, wsCard, cleanSheetTitle.slice(0, 31));
+        }
+      }
+
+      // Dosyayı İndir
+      const cleanPeriod = periodKey.replace('-', '_');
+      XLSX.writeFile(wb, `SpendLog_Ekstre_${cleanPeriod}_Kart_Dagilimi.xlsx`);
+      toast.success(`${displayDate} dönemi tüm kart harcamaları Excel olarak indirildi (${expList.length} işlem).`);
+    } catch (err: any) {
+      console.error('Excel export error:', err);
+      toast.error('Excel aktarımı sırasında bir hata oluştu: ' + (err.message || 'Bilinmeyen hata'));
+    } finally {
+      setExportingPeriod(null);
+    }
+  };
+
+  // 📊 TÜM DÖNEMLERİ TOPLU EXCEL DIŞA AKTAR
+  const handleExportAllPeriods = async () => {
+    try {
+      setExportingPeriod('ALL');
+      let expList = allExpenses;
+      if (expList.length === 0) {
+        const res = await api.get<CreditCardExpense[]>('/api/creditcardexpenses?isLiveEntry=false');
+        expList = res.data;
+      }
+
+      if (expList.length === 0) {
+        toast.error('Dışa aktarılacak ekstre harcaması bulunamadı.');
+        return;
+      }
+
+      const wb = XLSX.utils.book_new();
+
+      // 1. Dönemler & Kart Dağılım Özeti
+      const summaryRows: any[] = [];
+      for (const p of periods) {
+        const rawBreakdowns = (p.cardBreakdowns && p.cardBreakdowns.length > 0)
+          ? p.cardBreakdowns
+          : (periodCardBreakdownMap.get(p.periodKey) || []);
+
+        if (rawBreakdowns.length > 0) {
+          for (const cb of rawBreakdowns) {
+            summaryRows.push({
+              'Ekstre Dönemi': p.displayDate,
+              'Kart No': cb.cardFormatted,
+              'İşlem Adedi': cb.count,
+              'Kart Harcaması (₺)': Number(cb.totalExpense.toFixed(2)),
+              'Dönem Toplam Harcaması (₺)': Number(p.totalExpense.toFixed(2)),
+              'Kartın Dönem Payı (%)': p.totalExpense > 0 ? Number(((cb.totalExpense / p.totalExpense) * 100).toFixed(2)) : 0,
+              'Dönem Borcu (₺)': Number(p.periodDebt.toFixed(2)),
+              'Yapılan Ödeme (₺)': Number(p.totalPayment.toFixed(2)),
+            });
+          }
+        } else {
+          summaryRows.push({
+            'Ekstre Dönemi': p.displayDate,
+            'Kart No': 'Tüm Kartlar',
+            'İşlem Adedi': p.expenseCount,
+            'Kart Harcaması (₺)': Number(p.totalExpense.toFixed(2)),
+            'Dönem Toplam Harcaması (₺)': Number(p.totalExpense.toFixed(2)),
+            'Kartın Dönem Payı (%)': 100,
+            'Dönem Borcu (₺)': Number(p.periodDebt.toFixed(2)),
+            'Yapılan Ödeme (₺)': Number(p.totalPayment.toFixed(2)),
+          });
+        }
+      }
+
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      wsSummary['!cols'] = [
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 20 },
+        { wch: 25 },
+        { wch: 20 },
+        { wch: 18 },
+        { wch: 18 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Dönem & Kart Özeti');
+
+      // 2. Tüm Harcamalar (Dönem ve Kart Sıralı)
+      const sorted = [...expList].sort((a, b) => {
+        const pA = `${a.year}-${String(a.month).padStart(2, '0')}`;
+        const pB = `${b.year}-${String(b.month).padStart(2, '0')}`;
+        if (pA !== pB) return pB.localeCompare(pA);
+        const cA = formatCardLast4(a.cardNumberMasked);
+        const cB = formatCardLast4(b.cardNumberMasked);
+        if (cA !== cB) return cA.localeCompare(cB);
+        return new Date(b.tarih).getTime() - new Date(a.tarih).getTime();
+      });
+
+      const expRows = sorted.map((e) => ({
+        'Ekstre Dönemi': `${String(e.month).padStart(2, '0')}/${e.year}`,
+        'Kart No': formatCardLast4(e.cardNumberMasked),
+        'Tarih': e.tarih ? new Date(e.tarih).toLocaleDateString('tr-TR') : '',
+        'Açıklama': e.description || '',
+        'Taksit / Ek Bilgi': e.descriptionInfo || '',
+        'Ana Kategori': e.categoryName || e.mainCategory || 'Kategorisiz',
+        'Alt Kategori': e.subCategoryName || e.category || 'Genel',
+        'Tutar (₺)': Number(Math.abs(e.tutar).toFixed(2)),
+        'İşlem Türü': e.isExpense ? 'Harcama' : 'Ödeme / İade',
+        'Kart / Hesap Adı': e.accountName || accounts.find((a) => a.id === e.accountId)?.name || 'Kredi Kartı',
+      }));
+
+      const wsAllExp = XLSX.utils.json_to_sheet(expRows);
+      wsAllExp['!cols'] = [
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 13 },
+        { wch: 38 },
+        { wch: 20 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 20 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsAllExp, 'Tüm Harcamalar');
+
+      XLSX.writeFile(wb, `SpendLog_Tum_Ekstreler_Kart_Dagilimi_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success(`Tüm dönemlerin kart dağılımı ve harcamaları Excel olarak indirildi (${expList.length} işlem).`);
+    } catch (err: any) {
+      console.error('All periods export error:', err);
+      toast.error('Excel aktarımı sırasında bir hata oluştu: ' + (err.message || 'Bilinmeyen hata'));
+    } finally {
+      setExportingPeriod(null);
+    }
+  };
 
   // Handle PDF Upload
   const handleParsePdf = async (e: React.FormEvent) => {
@@ -2095,6 +2433,21 @@ export default function CreditCardsPage() {
                   <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
                     <th className="py-3 px-4">Ekstre Dönemi</th>
                     <th className="py-3 px-4">Dönem Harcaması & Kart Dağılımı</th>
+                    <th className="py-3 px-4 text-center">
+                      <button
+                        onClick={handleExportAllPeriods}
+                        disabled={exportingPeriod !== null}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-600 border border-emerald-500/20 transition cursor-pointer font-bold text-[11px] shadow-sm group disabled:opacity-50"
+                        title="Tüm ekstre dönemlerinin harcama ve kart dağılımını toplu Excel (.xlsx) olarak indir"
+                      >
+                        {exportingPeriod === 'ALL' ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                        ) : (
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white transition-colors" />
+                        )}
+                        <span>Excel</span>
+                      </button>
+                    </th>
                     <th className="py-3 px-4">Borç & Ödeme Durumu</th>
                     <th className="py-3 px-4">İşlem Sayısı & Dağılımı</th>
                     <th className="py-3 px-4 text-center">İncele</th>
@@ -2149,7 +2502,24 @@ export default function CreditCardsPage() {
                           </div>
                         </td>
 
-                        {/* 3. Sütun: Borç & Ödeme Durumu (Görsel Formatı) */}
+                        {/* 3. Sütun: Excel Dışa Aktar (Kırmızı Çizgi Konumu - Kart Dağılımlı Excel) */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <button
+                            onClick={() => handleExportPeriodExpenses(p.periodKey, p.displayDate, p)}
+                            disabled={exportingPeriod !== null}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-600 border border-emerald-500/20 transition cursor-pointer shadow-sm group disabled:opacity-50"
+                            title={`${p.displayDate} dönemi tüm kart harcamalarını kart dağılımı bazında Excel (.xlsx) olarak indir`}
+                          >
+                            {exportingPeriod === p.periodKey ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                            ) : (
+                              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white transition-colors" />
+                            )}
+                            <span>Excel</span>
+                          </button>
+                        </td>
+
+                        {/* 4. Sütun: Borç & Ödeme Durumu (Görsel Formatı) */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           <div className="flex items-center gap-3">
                             <div
@@ -2213,6 +2583,7 @@ export default function CreditCardsPage() {
                               setActiveCardFilter(null);
                               setSelectedCategoryFilter(null);
                               setSelectedSubCategoryFilter(null);
+                              setCurrentPage(1);
                               setActiveTab('EXPENSES');
                             }}
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-600 transition cursor-pointer shadow-sm"
@@ -2259,6 +2630,7 @@ export default function CreditCardsPage() {
                       const next = !showLiveOnly;
                       setShowLiveOnly(next);
                       setActiveCardFilter(null);
+                      setCurrentPage(1);
                       if (next) {
                         if (livePeriods.length > 0 && !selectedLivePeriod) {
                           setSelectedLivePeriod(livePeriods[0].periodKey);
@@ -2301,6 +2673,7 @@ export default function CreditCardsPage() {
                       setSelectedPeriod('ALL');
                       setSearchAllPeriods(true);
                       setActiveCardFilter(null);
+                      setCurrentPage(1);
                     }}
                     className={`group w-full text-left py-2 px-2.5 rounded-xl transition flex items-center justify-between border cursor-pointer mb-2 ${
                       selectedPeriod === 'ALL' || searchAllPeriods
@@ -2334,6 +2707,7 @@ export default function CreditCardsPage() {
                             setSelectedLivePeriod(p.periodKey);
                             setSearchAllPeriods(false);
                             setActiveCardFilter(null);
+                            setCurrentPage(1);
                           }}
                           className={`group w-full text-left py-2 px-2.5 rounded-xl transition flex items-center justify-between border cursor-pointer ${
                             isSelected
@@ -2383,6 +2757,7 @@ export default function CreditCardsPage() {
                           setSelectedPeriod(p.periodKey);
                           setSearchAllPeriods(false);
                           setActiveCardFilter(null);
+                          setCurrentPage(1);
                         }}
                         className={`group w-full text-left py-2 px-2.5 rounded-xl transition flex items-center justify-between border cursor-pointer ${
                           isSelected
@@ -2454,7 +2829,10 @@ export default function CreditCardsPage() {
                   <input
                     type="text"
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
                     placeholder={
                       searchAllPeriods
                         ? "Tüm dönemlerde harcama veya etiket ara..."
@@ -2464,7 +2842,10 @@ export default function CreditCardsPage() {
                   />
                   {searchTerm && (
                     <button
-                      onClick={() => setSearchTerm('')}
+                      onClick={() => {
+                        setSearchTerm('');
+                        setCurrentPage(1);
+                      }}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded transition cursor-pointer"
                       title="Aramayı Temizle"
                     >
@@ -2474,7 +2855,10 @@ export default function CreditCardsPage() {
                 </div>
 
                 <button
-                  onClick={() => setSearchAllPeriods(!searchAllPeriods)}
+                  onClick={() => {
+                    setSearchAllPeriods(!searchAllPeriods);
+                    setCurrentPage(1);
+                  }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition border flex items-center gap-1.5 cursor-pointer shrink-0 ${
                     searchAllPeriods
                       ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50 hover:bg-indigo-600/30 shadow-sm'
@@ -2496,7 +2880,10 @@ export default function CreditCardsPage() {
                 {/* 1. Kart Seçici */}
                 <select
                   value={activeCardFilter || ''}
-                  onChange={(e) => setActiveCardFilter(e.target.value || null)}
+                  onChange={(e) => {
+                    setActiveCardFilter(e.target.value || null);
+                    setCurrentPage(1);
+                  }}
                   className="bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[125px] truncate"
                   title="Kart Filtresi"
                 >
@@ -2514,6 +2901,7 @@ export default function CreditCardsPage() {
                   onChange={(e) => {
                     setSelectedCategoryFilter(e.target.value || null);
                     setSelectedSubCategoryFilter(null);
+                    setCurrentPage(1);
                   }}
                   className="bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[145px] truncate"
                   title="Ana Kategori Filtresi"
@@ -2529,7 +2917,10 @@ export default function CreditCardsPage() {
                 {/* 3. Alt Kategori Seçici */}
                 <select
                   value={selectedSubCategoryFilter || ''}
-                  onChange={(e) => setSelectedSubCategoryFilter(e.target.value || null)}
+                  onChange={(e) => {
+                    setSelectedSubCategoryFilter(e.target.value || null);
+                    setCurrentPage(1);
+                  }}
                   className={`bg-slate-950/80 border rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[140px] truncate ${
                     selectedSubCategoryFilter ? 'border-indigo-500/60 bg-indigo-500/10 text-indigo-300' : 'border-slate-800'
                   }`}
@@ -2550,6 +2941,7 @@ export default function CreditCardsPage() {
                     setActiveCardFilter(null);
                     setSelectedCategoryFilter(null);
                     setSelectedSubCategoryFilter(null);
+                    setCurrentPage(1);
                     fetchExpenses();
                   }}
                   className="p-2 bg-slate-950/80 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition cursor-pointer shrink-0"
@@ -2569,9 +2961,13 @@ export default function CreditCardsPage() {
                       <>
                         <Search className="w-3.5 h-3.5 text-indigo-400" />
                         <span>&quot;{searchTerm}&quot; Arama Sonuçları</span>
-                        {searchAllPeriods && (
-                          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-semibold">
+                        {searchAllPeriods ? (
+                          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-semibold border border-indigo-500/30">
                             Tüm Dönemler
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-semibold border border-indigo-500/30">
+                            {showLiveOnly ? (selectedLivePeriod || 'Tek Ay') : (activePeriodData?.displayDate || selectedPeriod || 'Tek Ay')}
                           </span>
                         )}
                       </>
@@ -2633,10 +3029,10 @@ export default function CreditCardsPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 text-xs">
                     {displayedExpenses.length > 0 ? (
-                      displayedExpenses.map((e) => {
+                      paginatedExpenses.map((e) => {
                         const date = new Date(e.tarih);
                         const formattedCard = formatCardLast4(e.cardNumberMasked);
-                        const isGlobalListing = searchAllPeriods || selectedPeriod === 'ALL' || searchTerm.trim().length > 0;
+                        const isGlobalListing = searchAllPeriods || (showLiveOnly ? selectedLivePeriod === 'ALL' : selectedPeriod === 'ALL');
                         return (
                           <tr key={e.id} className="hover:bg-slate-800/40 transition group">
                             <td className="py-2 px-3 text-slate-400 font-mono whitespace-nowrap">
@@ -2745,6 +3141,31 @@ export default function CreditCardsPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Pagination */}
+              <div className="p-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                <span>
+                  Sayfa {currentPage} / {totalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-medium transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Önceki</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-medium transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Sonraki</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -3187,7 +3608,10 @@ export default function CreditCardsPage() {
                         <td className="py-3.5 px-4 text-center whitespace-nowrap">
                           <button
                             onClick={() => {
+                              setSelectedPeriod('ALL');
+                              setSearchAllPeriods(true);
                               setSearchTerm(item.merchant);
+                              setCurrentPage(1);
                               setActiveTab('EXPENSES');
                             }}
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-600 transition cursor-pointer shadow-sm"

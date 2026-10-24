@@ -28,6 +28,7 @@ import {
   ArrowRightLeft,
   Sparkles,
   AlertCircle,
+  Repeat,
 } from 'lucide-react';
 
 export default function TransactionsPage() {
@@ -53,6 +54,7 @@ export default function TransactionsPage() {
   // Modal State (Create & Edit)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [isDuplicateMode, setIsDuplicateMode] = useState(false);
   const [accountId, setAccountId] = useState<number | ''>('');
   const [categoryId, setCategoryId] = useState<number | ''>('');
   const [subCategoryId, setSubCategoryId] = useState<number | ''>('');
@@ -105,6 +107,7 @@ export default function TransactionsPage() {
   }, []);
 
   const openCreateModal = () => {
+    setIsDuplicateMode(false);
     setEditingId(null);
     setAccountId(accounts[0]?.id || '');
     setCategoryId('');
@@ -118,6 +121,7 @@ export default function TransactionsPage() {
   };
 
   const openEditModal = (t: Transaction) => {
+    setIsDuplicateMode(false);
     setEditingId(t.id);
     setAccountId(t.accountId);
     setCategoryId(t.categoryId || '');
@@ -125,6 +129,20 @@ export default function TransactionsPage() {
     setAmount(t.amount.toString());
     setType(t.type);
     setTransactionDate(formatLocalDateToInput(t.transactionDate));
+    setDescription(t.description || '');
+    setTags(t.tags || '');
+    setIsModalOpen(true);
+  };
+
+  const openDuplicateModal = (t: Transaction) => {
+    setIsDuplicateMode(true);
+    setEditingId(null);
+    setAccountId(t.accountId);
+    setCategoryId(t.categoryId || '');
+    setSubCategoryId(t.subCategoryId || '');
+    setAmount(t.amount.toString());
+    setType(t.type);
+    setTransactionDate(formatLocalDateToInput());
     setDescription(t.description || '');
     setTags(t.tags || '');
     setIsModalOpen(true);
@@ -419,7 +437,7 @@ export default function TransactionsPage() {
                   <th className="py-2.5 px-3">Hesap</th>
                   <th className="py-2.5 px-3">Kategori</th>
                   <th className="py-2.5 px-3 text-right">Tutar</th>
-                  <th className="py-2.5 px-3 text-center w-20">İşlemler</th>
+                  <th className="py-2.5 px-3 text-center w-24">İşlemler</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-xs">
@@ -499,13 +517,22 @@ export default function TransactionsPage() {
                         <td className="py-2 px-3 text-center">
                           <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition">
                             {!t.isTransfer && (
-                              <button
-                                onClick={() => openEditModal(t)}
-                                className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition cursor-pointer"
-                                title="İşlemi Değiştir / Düzenle"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => openDuplicateModal(t)}
+                                  className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition cursor-pointer"
+                                  title="İşlemi Tekrarla (Hızlı Kayıt)"
+                                >
+                                  <Repeat className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => openEditModal(t)}
+                                  className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition cursor-pointer"
+                                  title="İşlemi Değiştir / Düzenle"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
                             <button
                               onClick={() => handleDelete(t)}
@@ -563,7 +590,7 @@ export default function TransactionsPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-bold text-white">
-                {editingId ? 'İşlemi Düzenle / Değiştir' : 'Yeni Finansal İşlem Ekle'}
+                {editingId ? 'İşlemi Düzenle / Değiştir' : isDuplicateMode ? 'İşlemi Tekrarla (Hızlı Kayıt)' : 'Yeni Finansal İşlem Ekle'}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -774,7 +801,7 @@ export default function TransactionsPage() {
                   className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-500/20 transition disabled:opacity-50 cursor-pointer"
                 >
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  <span>{editingId ? 'Değişiklikleri Kaydet' : 'İşlemi Kaydet'}</span>
+                  <span>{editingId ? 'Değişiklikleri Kaydet' : isDuplicateMode ? 'İşlemi Tekrarla ve Kaydet' : 'İşlemi Kaydet'}</span>
                 </button>
               </div>
             </form>

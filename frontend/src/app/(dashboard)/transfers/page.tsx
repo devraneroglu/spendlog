@@ -26,6 +26,9 @@ import {
   Search,
   RefreshCw,
   Sparkles,
+  Repeat,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 export default function TransfersPage() {
@@ -40,10 +43,13 @@ export default function TransfersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFromAccount, setSelectedFromAccount] = useState<string>('');
   const [selectedToAccount, setSelectedToAccount] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
 
   // Modal State (Create & Edit)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [isDuplicateMode, setIsDuplicateMode] = useState(false);
   const [fromAccountId, setFromAccountId] = useState<number | ''>('');
   const [toAccountId, setToAccountId] = useState<number | ''>('');
   const [amount, setAmount] = useState('');
@@ -132,9 +138,22 @@ export default function TransfersPage() {
     });
   }, [transfers, selectedFromAccount, selectedToAccount, searchTerm]);
 
+  const totalPages = Math.ceil(filteredTransfers.length / pageSize) || 1;
+  const paginatedTransfers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredTransfers.slice(start, start + pageSize);
+  }, [filteredTransfers, currentPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
   const hasActiveFilters = Boolean(selectedFromAccount || selectedToAccount || searchTerm);
 
   const openCreateModal = () => {
+    setIsDuplicateMode(false);
     setEditingId(null);
     setFromAccountId(accounts[0]?.id || '');
     setToAccountId(accounts[1]?.id || '');
@@ -147,6 +166,7 @@ export default function TransfersPage() {
   };
 
   const openEditModal = (t: Transfer) => {
+    setIsDuplicateMode(false);
     setEditingId(t.id);
     setFromAccountId(t.fromAccountId);
     setToAccountId(t.toAccountId);
@@ -158,6 +178,24 @@ export default function TransfersPage() {
     // Eğer hedef hesap kredi kartıysa ve transferin bir tarihi varsa dönem key'ini belirle
     const tDate = new Date(t.transferDate);
     const calculatedPeriodKey = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}`;
+    setSelectedPeriodKey(calculatedPeriodKey);
+
+    setIsModalOpen(true);
+  };
+
+  const openDuplicateModal = (t: Transfer) => {
+    setIsDuplicateMode(true);
+    setEditingId(null);
+    setFromAccountId(t.fromAccountId);
+    setToAccountId(t.toAccountId);
+    setAmount(t.amount.toString());
+    setFee(t.fee ? t.fee.toString() : '');
+    setTransferDate(formatLocalDateToInput());
+    setDescription(t.description || '');
+
+    // Eğer hedef hesap kredi kartıysa güncel ayın dönem key'ini belirle
+    const now = new Date();
+    const calculatedPeriodKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     setSelectedPeriodKey(calculatedPeriodKey);
 
     setIsModalOpen(true);
@@ -274,7 +312,10 @@ export default function TransfersPage() {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Açıklama ara..."
               className="w-full bg-slate-950/60 border border-slate-800 rounded-xl pl-9 pr-3.5 py-2 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
@@ -283,7 +324,10 @@ export default function TransfersPage() {
           {/* From Account Filter */}
           <select
             value={selectedFromAccount}
-            onChange={(e) => setSelectedFromAccount(e.target.value)}
+            onChange={(e) => {
+              setSelectedFromAccount(e.target.value);
+              setCurrentPage(1);
+            }}
             className="bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="">Tüm Kaynak Hesaplar</option>
@@ -297,7 +341,10 @@ export default function TransfersPage() {
           {/* To Account Filter */}
           <select
             value={selectedToAccount}
-            onChange={(e) => setSelectedToAccount(e.target.value)}
+            onChange={(e) => {
+              setSelectedToAccount(e.target.value);
+              setCurrentPage(1);
+            }}
             className="bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="">Tüm Hedef Hesaplar</option>
@@ -315,6 +362,7 @@ export default function TransfersPage() {
                 setSelectedFromAccount('');
                 setSelectedToAccount('');
                 setSearchTerm('');
+                setCurrentPage(1);
               }}
               className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-1.5 rounded-xl transition cursor-pointer font-medium"
               title="Filtreleri Temizle"
@@ -326,7 +374,10 @@ export default function TransfersPage() {
 
           {/* Refresh Data */}
           <button
-            onClick={fetchData}
+            onClick={() => {
+              fetchData();
+              setCurrentPage(1);
+            }}
             className="p-2 text-slate-400 hover:text-white bg-slate-950/60 hover:bg-slate-800 border border-slate-800 rounded-xl transition cursor-pointer"
             title="Listeyi Yenile"
           >
@@ -360,11 +411,11 @@ export default function TransfersPage() {
                   <th className="py-2.5 px-3">Hedef Hesap</th>
                   <th className="py-2.5 px-3">Açıklama</th>
                   <th className="py-2.5 px-3 text-right">Tutar</th>
-                  <th className="py-2.5 px-3 text-center w-20">İşlemler</th>
+                  <th className="py-2.5 px-3 text-center w-24">İşlemler</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-xs">
-                {filteredTransfers.map((t) => {
+                {paginatedTransfers.map((t) => {
                   const date = new Date(t.transferDate);
                   return (
                     <tr key={t.id} className="hover:bg-slate-800/40 transition group">
@@ -412,6 +463,13 @@ export default function TransfersPage() {
                       <td className="py-2 px-3 text-center">
                         <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition">
                           <button
+                            onClick={() => openDuplicateModal(t)}
+                            className="p-1 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition cursor-pointer"
+                            title="Transferi Tekrarla (Hızlı Kayıt)"
+                          >
+                            <Repeat className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             onClick={() => openEditModal(t)}
                             className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition cursor-pointer"
                             title="Transferi Değiştir / Düzenle"
@@ -433,6 +491,31 @@ export default function TransfersPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          <div className="p-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span>
+              Sayfa {currentPage} / {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-medium transition flex items-center gap-1 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Önceki</span>
+              </button>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-medium transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>Sonraki</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -442,7 +525,7 @@ export default function TransfersPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between p-6 border-b border-slate-800">
               <h3 className="text-lg font-bold text-white">
-                {editingId ? 'Transferi Düzenle' : 'Yeni Transfer Yap'}
+                {editingId ? 'Transferi Düzenle' : isDuplicateMode ? 'Transferi Tekrarla (Hızlı Kayıt)' : 'Yeni Transfer Yap'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -626,7 +709,7 @@ export default function TransfersPage() {
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-500/20 transition cursor-pointer disabled:opacity-50"
                 >
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  <span>{editingId ? 'Güncelle' : 'Transferi Kaydet'}</span>
+                  <span>{editingId ? 'Güncelle' : isDuplicateMode ? 'Transferi Tekrarla ve Kaydet' : 'Transferi Kaydet'}</span>
                 </button>
               </div>
             </form>

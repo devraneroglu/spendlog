@@ -203,7 +203,46 @@ const DEFAULT_PLATFORMS = [
   'Fiziki Kasa',
   'Yapı Kredi',
   'Ziraat Yatırım',
+  'Binance TR',
 ];
+
+export function normalizePlatformName(platform: string | null | undefined): string {
+  if (!platform || !platform.trim()) return '';
+  const clean = platform.trim();
+  const lowerKey = clean
+    .toLowerCase()
+    .replace(/[\s\-_]/g, '')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c');
+
+  // Bilinen ve sık kullanılan standart platform isimleri
+  if (lowerKey === 'yapikredi' || lowerKey.startsWith('yapikredi')) return 'Yapı Kredi';
+  if (lowerKey === 'midaskripto' || lowerKey.startsWith('midaskripto')) return 'Midas Kripto';
+  if (lowerKey === 'midas') return 'Midas';
+  if (lowerKey === 'ziraatyatirim' || lowerKey === 'ziraatyatirimi' || lowerKey.startsWith('ziraat')) return 'Ziraat Yatırım';
+  if (lowerKey === 'binancetr' || lowerKey === 'binance') return 'Binance TR';
+  if (lowerKey === 'fizikikasa' || lowerKey === 'fiziki') return 'Fiziki Kasa';
+
+  return clean;
+}
+
+export function isPlatformMatch(itemPlatform: string | null | undefined, filter: string): boolean {
+  if (!filter) return true;
+  if (!itemPlatform) return false;
+
+  const normItem = normalizePlatformName(itemPlatform);
+  const normFilter = normalizePlatformName(filter);
+  if (normItem && normFilter && normItem === normFilter) return true;
+
+  // Boşluksuz ve küçük harf toleranslı karşılaştırma
+  const rawItemKey = (itemPlatform || '').toLowerCase().replace(/[\s\-_]/g, '');
+  const rawFilterKey = (filter || '').toLowerCase().replace(/[\s\-_]/g, '');
+  return rawItemKey === rawFilterKey;
+}
 
 const TIMEFRAMES = ['1G', '1H', '1A', '3A', '1Y', 'TÜMÜ'];
 
@@ -777,7 +816,7 @@ export default function PortfolioPage() {
     setPurchasePrice(it.purchasePrice.toString());
     setPurchaseCommission(it.purchaseCommission ? it.purchaseCommission.toString() : '');
     setCurrentPrice(it.currentPrice.toString());
-    setPlatform(it.platform || customPlatforms[0] || '');
+    setPlatform(it.platform ? normalizePlatformName(it.platform) : customPlatforms[0] || '');
     setTargetPrice(it.targetPrice ? it.targetPrice.toString() : '');
     setPurchaseDate(it.purchaseDate ? formatLocalDateToInput(new Date(it.purchaseDate)) : formatLocalDateToInput());
     setIsModalOpen(true);
@@ -997,7 +1036,7 @@ export default function PortfolioPage() {
         'Güncel / Satış Değeri': it.currentValue,
         'Kâr / Zarar': it.profitLoss,
         'Getiri (%)': Number(it.profitLossPercent.toFixed(2)),
-        'Kurum / Platform': it.platform || '',
+        'Kurum / Platform': normalizePlatformName(it.platform) || '',
         'Alış Tarihi': it.purchaseDate ? new Date(it.purchaseDate).toLocaleDateString('tr-TR') : '',
         'Satış Fiyatı': !it.isActive && it.salePrice ? it.salePrice : '',
         'Satış Tarihi': !it.isActive && it.saleDate ? new Date(it.saleDate).toLocaleDateString('tr-TR') : '',
@@ -1037,7 +1076,7 @@ export default function PortfolioPage() {
         'Güncel / Satış Değeri': it.currentValue,
         'Kâr / Zarar': it.profitLoss,
         'Getiri (%)': Number(it.profitLossPercent.toFixed(2)),
-        'Kurum / Platform': it.platform || '',
+        'Kurum / Platform': normalizePlatformName(it.platform) || '',
         'Alış Tarihi': it.purchaseDate ? new Date(it.purchaseDate).toLocaleDateString('tr-TR') : '',
         'Satış Fiyatı': !it.isActive && it.salePrice ? it.salePrice : '',
         'Satış Tarihi': !it.isActive && it.saleDate ? new Date(it.saleDate).toLocaleDateString('tr-TR') : '',
@@ -1087,7 +1126,7 @@ export default function PortfolioPage() {
           <td style="padding: 6px 10px; text-align: right; font-family: monospace;">${it.cost.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${CURRENCY_SYMBOLS[it.currency]}</td>
           <td style="padding: 6px 10px; text-align: right; font-family: monospace; font-weight: 700;">${it.currentValue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${CURRENCY_SYMBOLS[it.currency]}</td>
           <td style="padding: 6px 10px; text-align: right; font-family: monospace; font-weight: 700; color: ${it.profitLoss >= 0 ? '#059669' : '#dc2626'};">${it.profitLoss >= 0 ? '+' : ''}${it.profitLoss.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${CURRENCY_SYMBOLS[it.currency]} (%${it.profitLossPercent.toFixed(2)})</td>
-          <td style="padding: 6px 10px; font-size: 11px; color: #475569;">${it.platform || '-'}</td>
+          <td style="padding: 6px 10px; font-size: 11px; color: #475569;">${normalizePlatformName(it.platform) || '-'}</td>
         </tr>
       `).join('');
 
@@ -1306,7 +1345,7 @@ export default function PortfolioPage() {
             purchasePrice,
             currentPrice,
             purchaseDate: purchaseDate.toISOString(),
-            platform: rawPlatform || null,
+            platform: rawPlatform ? normalizePlatformName(rawPlatform) : null,
             notes: rawNotes || null,
             isActive: !isSold,
             salePrice,
@@ -1422,11 +1461,36 @@ export default function PortfolioPage() {
     };
   }, [summary, activeItems, soldItems, usdRate]);
 
+  // Dinamik ve normalize edilmiş kurum/platform listesi (kayıtlı tanımlar + portföydeki tüm kurumlar)
+  const availableFilterPlatforms = useMemo(() => {
+    const platformMap = new Map<string, string>();
+
+    // 1. Kayıtlı ve varsayılan platformları ekle
+    customPlatforms.forEach((p) => {
+      const norm = normalizePlatformName(p);
+      if (norm) {
+        platformMap.set(norm.toLowerCase().replace(/[\s\-_]/g, ''), norm);
+      }
+    });
+
+    // 2. Portföyde yer alan tüm varlıkların kurumlarını ekle
+    items.forEach((it) => {
+      if (it.platform && it.platform.trim()) {
+        const norm = normalizePlatformName(it.platform);
+        if (norm) {
+          platformMap.set(norm.toLowerCase().replace(/[\s\-_]/g, ''), norm);
+        }
+      }
+    });
+
+    return Array.from(platformMap.values()).sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [customPlatforms, items]);
+
   const displayedItems = useMemo(() => {
     const list = activeTab === 'ACTIVE' ? activeItems : soldItems;
     const filtered = list.filter((i) => {
       if (filterAssetType && i.assetType !== Number(filterAssetType)) return false;
-      if (filterPlatform && (i.platform || '') !== filterPlatform) return false;
+      if (filterPlatform && !isPlatformMatch(i.platform, filterPlatform)) return false;
       if (searchTerm) {
         const lower = searchTerm.toLowerCase();
         return i.symbol.toLowerCase().includes(lower) || i.name.toLowerCase().includes(lower);
@@ -1563,7 +1627,7 @@ export default function PortfolioPage() {
       const subT = typeItems.get(it.assetType)!;
       subT.set(it.symbol, (subT.get(it.symbol) || 0) + val);
 
-      const plat = it.platform && it.platform.trim() !== '' ? it.platform.trim() : 'Fiziki / Diğer';
+      const plat = it.platform && it.platform.trim() !== '' ? normalizePlatformName(it.platform) : 'Fiziki / Diğer';
       platformGroups.set(plat, (platformGroups.get(plat) || 0) + val);
 
       if (!platformItems.has(plat)) platformItems.set(plat, new Map<string, number>());
@@ -2054,7 +2118,7 @@ export default function PortfolioPage() {
                 className="bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">Tüm Kurumlar / Platformlar</option>
-                {customPlatforms.map((p, idx) => (
+                {availableFilterPlatforms.map((p, idx) => (
                   <option key={idx} value={p}>
                     {p}
                   </option>
@@ -2213,7 +2277,7 @@ export default function PortfolioPage() {
                             </td>
                           )}
                           {(visibleColumns.platform ?? true) && (
-                            <td className="py-2 px-3 text-slate-300 font-medium whitespace-nowrap">{it.platform || 'Genel'}</td>
+                            <td className="py-2 px-3 text-slate-300 font-medium whitespace-nowrap">{normalizePlatformName(it.platform) || 'Genel'}</td>
                           )}
                           {(visibleColumns.purchaseDate ?? true) && (
                             <td className="py-2 px-3 font-mono whitespace-nowrap">
@@ -3994,7 +4058,7 @@ export default function PortfolioPage() {
                                   ? row.salePrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })
                                   : '-'}
                               </td>
-                              <td className="py-2 px-3 text-slate-400 truncate max-w-[90px]">{row.platform || '-'}</td>
+                              <td className="py-2 px-3 text-slate-400 truncate max-w-[90px]">{normalizePlatformName(row.platform) || '-'}</td>
                               <td className="py-2 px-3">
                                 {row.isValid ? (
                                   <span className="inline-flex items-center gap-1 text-emerald-400 text-[11px] font-semibold">
